@@ -1,7 +1,7 @@
 {
-  "version": "1.5.1",
-  "changelog": "Silent share từ YouTube/TikTok (Toast, không UI). Foreground Service giữ kết nối, tự reconnect khi mất mạng. Notification có nút Cast clipboard. Release-signed APK (Google không cảnh báo).",
-  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.1/ShareLink.apk",
+  "version": "1.5.2",
+  "changelog": "Fix URL từ YouTube share không decode &amp; → &. Iterative HTML entity decode + manual replace fallback.",
+  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.2/ShareLink.apk",
   "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.4.0/sharelink-windows.zip",
   "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.4.0/sharelink-mac.zip"
 }

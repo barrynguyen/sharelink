@@ -66,8 +66,10 @@ class ShareReceiverActivity : Activity() {
     private fun extractUrl(text: String?): String? {
         if (text.isNullOrBlank()) return null
         val decoded = htmlDecode(text)
+            .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
         val match = Regex("""https?://\S+""").find(decoded) ?: return decoded.trim()
         return match.value.trimEnd(')', ']', '.', ',')
+            .replace("&amp;", "&")
     }
 
     private fun htmlDecode(s: String): String {
