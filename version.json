@@ -1,7 +1,7 @@
 {
-  "version": "1.5.3",
-  "changelog": "QR code đen-trắng dễ scan hơn. Camera QR trên Android lock chế độ dọc (không bị xoay ngang).",
-  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.3/ShareLink.apk",
+  "version": "1.5.4",
+  "changelog": "Sửa lỗi không nhận được dialog cập nhật khi app vẫn chạy trong RAM. Update check chạy lại mỗi lần app vào foreground (debounce 60s).",
+  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.4/ShareLink.apk",
   "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.3/sharelink-windows.zip",
   "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.3/sharelink-mac.zip"
 }

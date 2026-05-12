@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         .connectTimeout(8, TimeUnit.SECONDS)
         .build()
 
+    private var lastUpdateCheckMs = 0L
     private var isVideoPlaying = false
     private var isPaused = false
 
@@ -129,9 +130,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         handleIntent(intent)
-        checkForUpdate()
         maybeRequestNotificationPerm()
         publishShareShortcut()
+        // checkForUpdate() runs in onStart() — re-checks on every foreground.
     }
 
     private fun publishShareShortcut() {
@@ -154,6 +155,10 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         ShareLinkService.addListener(stateListener)
+        // Re-check version on each foreground; debounce 60s to avoid spam
+        if (System.currentTimeMillis() - lastUpdateCheckMs > 60_000) {
+            checkForUpdate()
+        }
     }
 
     override fun onStop() {
@@ -172,17 +177,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkForUpdate() {
         if (UPDATE_URL.isEmpty()) return
+        lastUpdateCheckMs = System.currentTimeMillis()
+        val current = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (_: Exception) { return }
         Thread {
             try {
-                val req = Request.Builder().url(UPDATE_URL).build()
-                val body = httpClient.newCall(req).execute().body?.string() ?: return@Thread
+                // Cache-bust query so GitHub raw / CDN edges don't serve stale version.json
+                val url = "$UPDATE_URL?t=${System.currentTimeMillis()}"
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "ShareLink/$current Android")
+                    .header("Cache-Control", "no-cache")
+                    .build()
+                val resp = httpClient.newCall(req).execute()
+                if (!resp.isSuccessful) return@Thread
+                val body = resp.body?.string() ?: return@Thread
                 val json = JSONObject(body)
                 val latest = json.getString("version")
-                val current = packageManager.getPackageInfo(packageName, 0).versionName
                 if (latest == current) return@Thread
                 val changelog = json.optString("changelog", "")
                 val apkUrl = json.optString("android_url", "")
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     AlertDialog.Builder(this)
                         .setTitle("Có bản cập nhật v$latest")
                         .setMessage(changelog)
