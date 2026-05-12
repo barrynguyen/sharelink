@@ -104,7 +104,8 @@ class MainActivity : AppCompatActivity() {
                 setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                 setPrompt("Scan QR từ ShareLink trên máy tính")
                 setBeepEnabled(false)
-                setOrientationLocked(false)
+                setOrientationLocked(true)
+                setCaptureActivity(PortraitCaptureActivity::class.java)
             })
         }
 

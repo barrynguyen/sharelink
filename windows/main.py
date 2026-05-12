@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.5.2"
+VERSION = "1.5.3"
 UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 PORT = 8765
 MARIONETTE_PORT = 2828
@@ -310,13 +310,13 @@ class App:
         if HAS_QR:
             qr_card = tk.Frame(self.root, bg='#16213e')
             qr_card.pack(pady=12)
-            qr = qrcode.QRCode(box_size=4, border=2,
-                               error_correction=qrcode.constants.ERROR_CORRECT_L)
+            qr = qrcode.QRCode(box_size=6, border=3,
+                               error_correction=qrcode.constants.ERROR_CORRECT_M)
             qr.add_data(f"{self.ip}:{PORT}")
             qr.make(fit=True)
-            img = qr.make_image(fill_color="#e94560", back_color="#16213e")
+            img = qr.make_image(fill_color="black", back_color="white")
             self._qr_img = ImageTk.PhotoImage(img)
-            tk.Label(qr_card, image=self._qr_img, bg='#16213e').pack()
+            tk.Label(qr_card, image=self._qr_img, bg='white', bd=0).pack()
             tk.Label(qr_card, text="Hoặc scan QR bằng app Android",
                      font=('Helvetica', 9), bg='#1a1a2e', fg='#7a7a9a').pack(pady=(4, 0))
         else:
