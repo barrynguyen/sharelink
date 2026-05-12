@@ -35,6 +35,53 @@ FULLSCREEN_SELECTORS = [
     "[aria-label*='ullscreen']",
 ]
 
+SKIP_AD_JS = """
+(function(){
+    function fire(el) {
+        ['mousedown','mouseup','click'].forEach(function(t){
+            el.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true}));
+        });
+    }
+    function visible(el) {
+        var r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
+    function tryDoc(doc) {
+        var sels = [
+            '.ytp-skip-ad-button__action-button',
+            '.ytp-skip-ad-button',
+            '.ytp-ad-skip-button',
+            '.ytp-ad-skip-button-modern',
+            '.videoAdUiSkipButton'
+        ];
+        for (var i = 0; i < sels.length; i++) {
+            var els = doc.querySelectorAll(sels[i]);
+            for (var j = 0; j < els.length; j++) {
+                if (visible(els[j])) { fire(els[j]); return true; }
+            }
+        }
+        var skipTexts = ['b\\u1ecf qua', 'skip'];
+        var cands = doc.querySelectorAll('button,[role="button"],[class*="skip"],[class*="Skip"],[class*="ad-"]');
+        for (var i = 0; i < cands.length; i++) {
+            var text = (cands[i].textContent || '').toLowerCase().trim();
+            for (var j = 0; j < skipTexts.length; j++) {
+                if (text.indexOf(skipTexts[j]) !== -1 && visible(cands[i])) {
+                    fire(cands[i]); return true;
+                }
+            }
+        }
+        return false;
+    }
+    if (tryDoc(document)) return true;
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+        try { var fd = frames[i].contentDocument; if (fd && tryDoc(fd)) return true; }
+        catch(e) {}
+    }
+    return false;
+})()
+"""
+
 user32 = ctypes.windll.user32
 VK_F11    = 0x7A
 VK_CTRL   = 0x11
@@ -143,6 +190,32 @@ def marionette_ready():
         return False
 
 
+def marionette_skip_ad():
+    """Click nút skip ad nếu đang hiện. Trả về True nếu đã skip."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3)
+        s.connect(('127.0.0.1', MARIONETTE_PORT))
+        _mar_recv(s)
+        r = _mar_cmd(s, 1, "WebDriver:NewSession", {"capabilities": {}})
+        if not r or r[2] is not None:
+            s.close()
+            return False
+        wins = _mar_cmd(s, 2, "WebDriver:GetWindowHandles", {})
+        if not wins or not wins[3]:
+            s.close()
+            return False
+        _mar_cmd(s, 3, "WebDriver:SwitchToWindow",
+                 {"handle": wins[3][0], "focus": False})
+        _mar_cmd(s, 4, "Marionette:SetContext", {"value": "content"})
+        r = _mar_cmd(s, 5, "WebDriver:ExecuteScript",
+                     {"script": SKIP_AD_JS, "args": []})
+        s.close()
+        return bool(r and r[2] is None and r[3])
+    except Exception:
+        return False
+
+
 def marionette_click_fullscreen():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -207,6 +280,7 @@ class App:
         self._is_playing = False
         self._paused = False
         self._browser_hwnd = None
+        self._skip_ad_active = False
 
         self._build_ui()
         self._start_server()
@@ -378,9 +452,19 @@ class App:
             time.sleep(0.5)
             self._fullscreen_video_player()
 
+    def _ad_skip_loop(self):
+        while self._skip_ad_active:
+            marionette_skip_ad()
+            time.sleep(3)
+
     def _play_in_browser(self, url):
         self._is_playing = True
         self._paused = False
+        self._skip_ad_active = True
+        if not hasattr(self, '_skip_ad_thread') or not self._skip_ad_thread.is_alive():
+            self._skip_ad_thread = threading.Thread(
+                target=self._ad_skip_loop, daemon=True)
+            self._skip_ad_thread.start()
         self._update_controls()
 
         def open_and_maximize():
@@ -428,6 +512,7 @@ class App:
         self._update_controls()
 
     def _stop_video(self):
+        self._skip_ad_active = False
         if self._focus_browser():
             keypress(VK_F11)      # thoát fullscreen
             time.sleep(0.3)
