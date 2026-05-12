@@ -17,6 +17,13 @@ __pycache__/
 .venv/
 venv/
 
+# Mac .app build artifacts
+mac/build/
+mac/dist/
+mac/ShareLink.iconset/
+mac/ShareLink.icns
+mac/ShareLink.spec
+
 # Claude Code
 .claude/
 

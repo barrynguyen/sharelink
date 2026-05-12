@@ -17,9 +17,17 @@ echo "[*] Installing PyInstaller and runtime deps..."
 pip3 install --quiet pyinstaller websockets qrcode Pillow
 
 echo
+echo "[*] Generating icon..."
+python3 make_icon.py
+
+echo
 echo "[*] Building ShareLink.app..."
 rm -rf build dist ShareLink.spec
-pyinstaller --noconfirm --windowed --name "ShareLink" main.py
+pyinstaller --noconfirm --windowed \
+    --name "ShareLink" \
+    --icon ShareLink.icns \
+    --osx-bundle-identifier "com.sharelink.mac" \
+    main.py
 
 if [ -d "dist/ShareLink.app" ]; then
     echo
