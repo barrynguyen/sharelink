@@ -1,7 +1,7 @@
 {
   "version": "1.5.2",
-  "changelog": "Fix URL từ YouTube share không decode &amp; → &. Iterative HTML entity decode + manual replace fallback.",
+  "changelog": "Fix URL từ YouTube share không decode &amp; → &. Iterative HTML entity decode + manual replace fallback. Mac đóng gói thành .app (mở bằng icon, không cần terminal).",
   "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.2/ShareLink.apk",
-  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.4.0/sharelink-windows.zip",
-  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.4.0/sharelink-mac.zip"
+  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.2/sharelink-windows.zip",
+  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.2/sharelink-mac.zip"
 }

@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.4.0"
+VERSION = "1.5.2"
 UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 PORT = 8765
 MARIONETTE_PORT = 2828
