@@ -196,11 +196,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            val url = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
-            etUrl.setText(url)
-            if (isConnected) sendUrl(url) else connect()
+        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
+        val url = extractUrl(text).takeIf { it.isNotEmpty() } ?: return
+        etUrl.setText(url)
+        when {
+            isConnected -> sendUrl(url)
+            etIp.text.isNotEmpty() -> connect()  // onOpen sẽ tự sendUrl
+            else -> toast("Nhập địa chỉ IP máy tính trước")
         }
+    }
+
+    private fun extractUrl(text: String): String {
+        val match = Regex("""https?://\S+""").find(text) ?: return text.trim()
+        // Bỏ dấu ngoặc hoặc dấu câu cuối URL do app thêm vào
+        return match.value.trimEnd(')', ']', '.', ',')
     }
 
     private fun connect() {
