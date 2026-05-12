@@ -27,6 +27,9 @@ pyinstaller --noconfirm --windowed \
     --name "ShareLink" \
     --icon ShareLink.icns \
     --osx-bundle-identifier "com.sharelink.mac" \
+    --collect-all qrcode \
+    --collect-all PIL \
+    --collect-all websockets \
     main.py
 
 if [ -d "dist/ShareLink.app" ]; then
