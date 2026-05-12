@@ -1,0 +1,3 @@
+-keep class com.sharelink.app.** { *; }
+-dontwarn okhttp3.**
+-keep class okhttp3.** { *; }

@@ -1,0 +1,23 @@
+# Android build
+android/.gradle/
+android/app/build/
+android/local.properties
+android/*.iml
+android/.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

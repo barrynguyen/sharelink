@@ -1,0 +1,255 @@
+package com.sharelink.app
+
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import okhttp3.*
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+private const val UPDATE_URL = "" // VD: https://raw.githubusercontent.com/user/sharelink/main/version.json
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var etIp: EditText
+    private lateinit var etUrl: EditText
+    private lateinit var btnConnect: Button
+    private lateinit var btnScanQr: Button
+    private lateinit var btnShare: Button
+    private lateinit var btnFullscreen: Button
+    private lateinit var btnPause: Button
+    private lateinit var btnStop: Button
+    private lateinit var tvStatus: TextView
+    private lateinit var statusDot: View
+
+    private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
+        val content = result.contents ?: return@registerForActivityResult
+        etIp.setText(content)
+        connect()
+    }
+
+    private var webSocket: WebSocket? = null
+    private var isConnected = false
+    private var isVideoPlaying = false
+    private var isPaused = false
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .build()
+
+    private val wsListener = object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            isConnected = true
+            runOnUiThread {
+                setStatus(Status.CONNECTED)
+                btnConnect.text = "Kết nối lại"
+                val url = etUrl.text.toString().trim()
+                if (url.isNotEmpty()) sendUrl(url)
+            }
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            isConnected = false
+            runOnUiThread {
+                setStatus(Status.ERROR, "Lỗi: ${t.message}")
+                resetControls()
+            }
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            isConnected = false
+            runOnUiThread {
+                setStatus(Status.DISCONNECTED)
+                resetControls()
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        etIp      = findViewById(R.id.etIp)
+        etUrl     = findViewById(R.id.etUrl)
+        btnConnect    = findViewById(R.id.btnConnect)
+        btnScanQr     = findViewById(R.id.btnScanQr)
+        btnShare      = findViewById(R.id.btnShare)
+        btnFullscreen = findViewById(R.id.btnFullscreen)
+        btnPause      = findViewById(R.id.btnPause)
+        btnStop       = findViewById(R.id.btnStop)
+        tvStatus  = findViewById(R.id.tvStatus)
+        statusDot = findViewById(R.id.statusDot)
+
+        val version = packageManager.getPackageInfo(packageName, 0).versionName
+        findViewById<TextView>(R.id.tvVersion).text = "v$version"
+
+        val prefs = getSharedPreferences("sharelink", MODE_PRIVATE)
+        etIp.setText(prefs.getString("pc_ip", ""))
+
+        btnConnect.setOnClickListener { connect() }
+        btnScanQr.setOnClickListener {
+            scanLauncher.launch(ScanOptions().apply {
+                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                setPrompt("Scan QR từ ShareLink trên máy tính")
+                setBeepEnabled(false)
+                setOrientationLocked(false)
+            })
+        }
+
+        btnShare.setOnClickListener {
+            val url = etUrl.text.toString().trim()
+            if (url.isEmpty()) { toast("Nhập hoặc dán link video"); return@setOnClickListener }
+            if (!isConnected) { toast("Chưa kết nối với máy tính"); return@setOnClickListener }
+            sendUrl(url)
+        }
+
+        btnFullscreen.setOnClickListener { sendCommand("fullscreen") }
+
+        btnPause.setOnClickListener {
+            sendCommand("pause")
+            isPaused = !isPaused
+            btnPause.text = if (isPaused) "▶  Tiếp tục" else "⏸  Tạm dừng"
+        }
+
+        btnStop.setOnClickListener {
+            sendCommand("stop")
+            resetControls()
+        }
+
+        handleIntent(intent)
+        checkForUpdate()
+    }
+
+    private fun checkForUpdate() {
+        if (UPDATE_URL.isEmpty()) return
+        Thread {
+            try {
+                val req = Request.Builder().url(UPDATE_URL).build()
+                val body = client.newCall(req).execute().body?.string() ?: return@Thread
+                val json = JSONObject(body)
+                val latest = json.getString("version")
+                val current = packageManager.getPackageInfo(packageName, 0).versionName
+                if (latest == current) return@Thread
+                val changelog = json.optString("changelog", "")
+                val apkUrl = json.optString("android_url", "")
+                runOnUiThread {
+                    AlertDialog.Builder(this)
+                        .setTitle("Có bản cập nhật v$latest")
+                        .setMessage(changelog)
+                        .setPositiveButton("Tải về") { _, _ ->
+                            if (apkUrl.isNotEmpty())
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)))
+                        }
+                        .setNegativeButton("Để sau", null)
+                        .show()
+                }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            val url = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
+            etUrl.setText(url)
+            if (isConnected) sendUrl(url) else connect()
+        }
+    }
+
+    private fun connect() {
+        val input = etIp.text.toString().trim()
+        if (input.isEmpty()) { toast("Nhập địa chỉ IP máy tính"); return }
+
+        getSharedPreferences("sharelink", MODE_PRIVATE).edit()
+            .putString("pc_ip", input).apply()
+
+        val wsUrl = when {
+            input.startsWith("ws://") -> input
+            input.contains(":")       -> "ws://$input"
+            else                      -> "ws://$input:8765"
+        }
+
+        webSocket?.close(1000, null)
+        setStatus(Status.CONNECTING)
+
+        val request = Request.Builder().url(wsUrl).build()
+        webSocket = client.newWebSocket(request, wsListener)
+    }
+
+    private fun sendUrl(url: String) {
+        val payload = JSONObject().put("url", url).toString()
+        val ok = webSocket?.send(payload) ?: false
+        if (ok) {
+            toast("Đang phát video trên màn hình lớn!")
+            etUrl.setText("")
+            isVideoPlaying = true
+            isPaused = false
+            setControlsEnabled(true)
+            btnPause.text = "⏸  Tạm dừng"
+        } else {
+            toast("Gửi thất bại — thử kết nối lại")
+            isConnected = false
+            setStatus(Status.DISCONNECTED)
+        }
+    }
+
+    private fun sendCommand(command: String) {
+        val payload = JSONObject().put("command", command).toString()
+        val ok = webSocket?.send(payload) ?: false
+        if (!ok) toast("Lỗi gửi lệnh — thử kết nối lại")
+    }
+
+    private fun resetControls() {
+        isVideoPlaying = false
+        isPaused = false
+        setControlsEnabled(false)
+        btnPause.text = "⏸  Tạm dừng"
+    }
+
+    private fun setControlsEnabled(enabled: Boolean) {
+        val alpha = if (enabled) 1.0f else 0.45f
+        btnFullscreen.isEnabled = enabled
+        btnFullscreen.alpha = alpha
+        btnPause.isEnabled = enabled
+        btnPause.alpha = alpha
+        btnStop.isEnabled = enabled
+        btnStop.alpha = alpha
+    }
+
+    private enum class Status { CONNECTING, CONNECTED, DISCONNECTED, ERROR }
+
+    private fun setStatus(s: Status, msg: String? = null) {
+        val (text, color) = when (s) {
+            Status.CONNECTING   -> "Đang kết nối..."  to "#FFC107"
+            Status.CONNECTED    -> "Đã kết nối"       to "#4CAF50"
+            Status.DISCONNECTED -> "Chưa kết nối"     to "#F44336"
+            Status.ERROR        -> (msg ?: "Lỗi kết nối") to "#F44336"
+        }
+        tvStatus.text = text
+        statusDot.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(color))
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    override fun onDestroy() {
+        super.onDestroy()
+        webSocket?.close(1000, null)
+        client.dispatcher.executorService.shutdown()
+    }
+}
