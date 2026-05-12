@@ -471,6 +471,7 @@ class App:
         async def handler(ws):
             self.connection_count += 1
             self._set_status(True)
+            print(f"[ws] client connected from {ws.remote_address}", flush=True)
             try:
                 async for msg in ws:
                     try:
@@ -482,20 +483,30 @@ class App:
                         command = ''
 
                     if url:
+                        print(f"[ws] URL received: {url}", flush=True)
                         self._set_status(True, url)
                         self._play_in_browser(url)
                     elif command == 'pause':
+                        print(f"[ws] CMD: pause", flush=True)
                         threading.Thread(target=self._toggle_pause, daemon=True).start()
                     elif command == 'stop':
+                        print(f"[ws] CMD: stop", flush=True)
                         threading.Thread(target=self._stop_video, daemon=True).start()
                     elif command == 'fullscreen':
+                        print(f"[ws] CMD: fullscreen", flush=True)
                         threading.Thread(target=self._fullscreen_video_player, daemon=True).start()
+                    else:
+                        print(f"[ws] unknown msg: {msg[:80]!r}", flush=True)
             finally:
                 self.connection_count = max(0, self.connection_count - 1)
                 self._set_status(self.connection_count > 0)
+                print(
+                    f"[ws] client disconnected: code={ws.close_code} reason={ws.close_reason!r}",
+                    flush=True,
+                )
 
         async with websockets.serve(handler, '0.0.0.0', PORT,
-                                    ping_interval=20, ping_timeout=10,
+                                    ping_interval=20, ping_timeout=30,
                                     process_request=self._http_handler):
             await asyncio.Future()
 

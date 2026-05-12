@@ -1,5 +1,14 @@
 # CLAUDE.md
 
+# Claude Code Project Rules
+
+## Tool Execution Constraints
+- CRITICAL: You are strictly forbidden from executing any bash commands that reference paths outside of this project root directory.
+- Never use absolute paths like `/etc`, `/var`, `~/.ssh`, or `../` to navigate away from the current directory.
+- All file operations (Read, Write, Edit) must be restricted to the subdirectories of this specific repository.
+- If a command requires global access, fail the task immediately and ask the user for permission.
+
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this project is
@@ -54,7 +63,24 @@ cd android
 
 **Ad-skip loop** — background thread runs `marionette_skip_ad()` every 3 s while a video is playing. Uses `SKIP_AD_JS` injected via Marionette to find and click skip buttons (YouTube selectors + text-match fallback for Vietnamese "bỏ qua").
 
-**Auto-update** — all three platforms fetch `version.json` from GitHub raw on startup and prompt the user if the version differs. Android downloads and installs the APK directly; Mac/Windows open the download URL.
+**Auto-update** — all three platforms fetch `version.json` from GitHub raw on startup and prompt the user if the version differs. All platforms open the download URL in the browser (Android used to install directly but `REQUEST_INSTALL_PACKAGES` triggered Google Play Protect, so removed in v1.5.0).
+
+## Android architecture (v1.5.0+)
+
+`ShareLinkService` is a Foreground Service that owns the WebSocket connection — persistent across Activity lifecycle. All entry points fan in to the Service via Intents:
+- `MainActivity` — UI for pairing/control. Observes Service state via `StateListener` (companion object registry).
+- `ShareReceiverActivity` — NoDisplay activity registered for `ACTION_SEND text/plain`. Extracts URL, forwards to Service, Toast, finish. **This is the "silent share" entry point** — user stays in YouTube/TikTok.
+- `ClipboardCastActivity` — NoDisplay activity launched by notification action; reads clipboard, forwards to Service.
+
+Service reconnect: `ScheduledThreadPoolExecutor(1)` with exponential backoff (3→6→12→30s, reset on success) + `ConnectivityManager.NetworkCallback` for immediate reconnect on network change. Server `ping_timeout=30s` (raised from 10s to survive Doze resume).
+
+`res/xml/shortcuts.xml` declares a `<share-target>` so ShareLink is eligible for Direct Share row. `MainActivity.publishShareShortcut()` pushes a long-lived dynamic shortcut matching the share-target.
+
+## Release signing (Android)
+
+Production APKs MUST be signed with `android/sharelink-release.jks` (gitignored — keep this file safe; losing it breaks future updates). Password is `sharelink2026`. Debug builds use the default debug keystore.
+
+`./gradlew assembleRelease` produces `app/build/outputs/apk/release/app-release.apk` — minified, signed, ~2.3 MB. This is what gets uploaded to GitHub Releases.
 
 ## Version bumping
 

@@ -11,14 +11,24 @@ android {
         applicationId "com.sharelink.app"
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName "1.4.0"
+        versionCode 7
+        versionName "1.5.1"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../sharelink-release.jks")
+            storePassword "sharelink2026"
+            keyAlias "sharelink"
+            keyPassword "sharelink2026"
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 

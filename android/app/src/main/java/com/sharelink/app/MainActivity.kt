@@ -1,10 +1,10 @@
 package com.sharelink.app
 
+import android.Manifest
 import android.content.Intent
-import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -13,11 +13,15 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
-import java.io.File
+import android.net.Uri
+import androidx.core.content.ContextCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
-import okhttp3.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -42,57 +46,31 @@ class MainActivity : AppCompatActivity() {
         connect()
     }
 
-    private var webSocket: WebSocket? = null
-    private var isConnected = false
-    private var isVideoPlaying = false
-    private var isPaused = false
-    private var autoReconnect = false
-    private var reconnectThread: Thread? = null
+    private val notifPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* either way we proceed; Service still works, just no visible notification */ }
 
-    private val client = OkHttpClient.Builder()
+    private val httpClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.SECONDS)
-        .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
-    private val wsListener = object : WebSocketListener() {
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            isConnected = true
-            runOnUiThread {
+    private var isVideoPlaying = false
+    private var isPaused = false
+
+    private val stateListener = ShareLinkService.StateListener { state, ip ->
+        when (state) {
+            ShareLinkService.ConnState.CONNECTED -> {
                 setStatus(Status.CONNECTED)
                 btnConnect.text = "Kết nối lại"
-                val url = etUrl.text.toString().trim()
-                if (url.isNotEmpty()) sendUrl(url)
             }
-        }
-
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            isConnected = false
-            runOnUiThread {
+            ShareLinkService.ConnState.CONNECTING -> {
+                setStatus(Status.CONNECTING)
+            }
+            ShareLinkService.ConnState.DISCONNECTED -> {
                 setStatus(Status.DISCONNECTED)
                 resetControls()
             }
-            scheduleReconnect()
         }
-
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            isConnected = false
-            runOnUiThread {
-                setStatus(Status.DISCONNECTED)
-                resetControls()
-            }
-            scheduleReconnect()
-        }
-    }
-
-    private fun scheduleReconnect() {
-        if (!autoReconnect) return
-        reconnectThread = Thread {
-            Thread.sleep(3000)
-            if (autoReconnect && !isConnected) {
-                runOnUiThread { connect(silent = true) }
-            }
-        }.also { it.isDaemon = true; it.start() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -133,7 +111,6 @@ class MainActivity : AppCompatActivity() {
         btnShare.setOnClickListener {
             val url = etUrl.text.toString().trim()
             if (url.isEmpty()) { toast("Nhập hoặc dán link video"); return@setOnClickListener }
-            if (!isConnected) { toast("Chưa kết nối với máy tính"); return@setOnClickListener }
             sendUrl(url)
         }
 
@@ -152,6 +129,44 @@ class MainActivity : AppCompatActivity() {
 
         handleIntent(intent)
         checkForUpdate()
+        maybeRequestNotificationPerm()
+        publishShareShortcut()
+    }
+
+    private fun publishShareShortcut() {
+        try {
+            val shortcut = ShortcutInfoCompat.Builder(this, "sharelink_cast")
+                .setShortLabel("Phát lên máy tính")
+                .setLongLabel("ShareLink — phát fullscreen trên máy tính")
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_shortcut_cast))
+                .setIntent(
+                    Intent(Intent.ACTION_VIEW)
+                        .setClassName(packageName, "com.sharelink.app.MainActivity")
+                )
+                .setLongLived(true)
+                .setCategories(setOf("com.sharelink.app.category.CAST"))
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+        } catch (_: Exception) {}
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ShareLinkService.addListener(stateListener)
+    }
+
+    override fun onStop() {
+        ShareLinkService.removeListener(stateListener)
+        super.onStop()
+    }
+
+    private fun maybeRequestNotificationPerm() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun checkForUpdate() {
@@ -159,7 +174,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             try {
                 val req = Request.Builder().url(UPDATE_URL).build()
-                val body = client.newCall(req).execute().body?.string() ?: return@Thread
+                val body = httpClient.newCall(req).execute().body?.string() ?: return@Thread
                 val json = JSONObject(body)
                 val latest = json.getString("version")
                 val current = packageManager.getPackageInfo(packageName, 0).versionName
@@ -170,8 +185,8 @@ class MainActivity : AppCompatActivity() {
                     AlertDialog.Builder(this)
                         .setTitle("Có bản cập nhật v$latest")
                         .setMessage(changelog)
-                        .setPositiveButton("Cập nhật") { _, _ ->
-                            if (apkUrl.isNotEmpty()) downloadAndInstall(apkUrl)
+                        .setPositiveButton("Tải về") { _, _ ->
+                            if (apkUrl.isNotEmpty()) openInBrowser(apkUrl)
                         }
                         .setNegativeButton("Để sau", null)
                         .show()
@@ -180,29 +195,13 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun downloadAndInstall(apkUrl: String) {
-        toast("Đang tải bản cập nhật...")
-        Thread {
-            try {
-                val bytes = client.newCall(
-                    Request.Builder().url(apkUrl).build()
-                ).execute().body?.bytes() ?: run {
-                    runOnUiThread { toast("Tải thất bại") }
-                    return@Thread
-                }
-                val file = File(getExternalFilesDir(null), "ShareLink-update.apk")
-                file.writeBytes(bytes)
-                val uri = FileProvider.getUriForFile(this, "$packageName.provider", file)
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                runOnUiThread { startActivity(intent) }
-            } catch (e: Exception) {
-                runOnUiThread { toast("Lỗi: ${e.message}") }
-            }
-        }.start()
+    private fun openInBrowser(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            toast("Không mở được trình duyệt")
+        }
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -215,54 +214,56 @@ class MainActivity : AppCompatActivity() {
         val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
         val url = extractUrl(text).takeIf { it.isNotEmpty() } ?: return
         etUrl.setText(url)
-        when {
-            isConnected -> sendUrl(url)
-            etIp.text.isNotEmpty() -> connect()  // onOpen sẽ tự sendUrl
-            else -> toast("Nhập địa chỉ IP máy tính trước")
+        val ip = etIp.text.toString().trim()
+        if (ip.isEmpty()) {
+            toast("Nhập địa chỉ IP máy tính trước")
+            return
         }
+        sendUrl(url)
     }
 
     private fun extractUrl(text: String): String {
-        val match = Regex("""https?://\S+""").find(text) ?: return text.trim()
-        // Bỏ dấu ngoặc hoặc dấu câu cuối URL do app thêm vào
+        val decoded = htmlDecode(text)
+        val match = Regex("""https?://\S+""").find(decoded) ?: return decoded.trim()
         return match.value.trimEnd(')', ']', '.', ',')
     }
 
-    private fun connect(silent: Boolean = false) {
-        val input = etIp.text.toString().trim()
-        if (input.isEmpty()) {
-            if (!silent) toast("Nhập địa chỉ IP máy tính")
-            return
+    private fun htmlDecode(s: String): String {
+        var cur = s
+        repeat(3) {
+            val next = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                android.text.Html.fromHtml(cur, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+            } else {
+                @Suppress("DEPRECATION") android.text.Html.fromHtml(cur).toString()
+            }
+            if (next == cur) return cur
+            cur = next
         }
-
-        getSharedPreferences("sharelink", MODE_PRIVATE).edit()
-            .putString("pc_ip", input).apply()
-
-        val wsUrl = when {
-            input.startsWith("ws://") -> input
-            input.contains(":")       -> "ws://$input"
-            else                      -> "ws://$input:8765"
-        }
-
-        autoReconnect = true
-        webSocket?.close(1000, null)
-        if (!silent) setStatus(Status.CONNECTING)
-
-        val request = Request.Builder().url(wsUrl).build()
-        webSocket = client.newWebSocket(request, wsListener)
+        return cur
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (autoReconnect && !isConnected && etIp.text.isNotEmpty()) {
-            connect(silent = true)
+    private fun connect() {
+        val input = etIp.text.toString().trim()
+        if (input.isEmpty()) { toast("Nhập địa chỉ IP máy tính"); return }
+        setStatus(Status.CONNECTING)
+        val svc = Intent(this, ShareLinkService::class.java).apply {
+            action = ShareLinkService.ACTION_CONNECT
+            putExtra(ShareLinkService.EXTRA_IP, input)
         }
+        ContextCompat.startForegroundService(this, svc)
     }
 
     private fun sendUrl(url: String) {
-        val payload = JSONObject().put("url", url).toString()
-        val ok = webSocket?.send(payload) ?: false
-        if (ok) {
+        val ip = etIp.text.toString().trim()
+        if (ip.isEmpty()) { toast("Nhập địa chỉ IP máy tính trước"); return }
+        val svc = Intent(this, ShareLinkService::class.java).apply {
+            action = ShareLinkService.ACTION_SEND_URL
+            putExtra(ShareLinkService.EXTRA_URL, url)
+            putExtra(ShareLinkService.EXTRA_IP, ip)
+        }
+        ContextCompat.startForegroundService(this, svc)
+
+        if (ShareLinkService.currentState == ShareLinkService.ConnState.CONNECTED) {
             toast("Đang phát video trên màn hình lớn!")
             etUrl.setText("")
             isVideoPlaying = true
@@ -270,16 +271,20 @@ class MainActivity : AppCompatActivity() {
             setControlsEnabled(true)
             btnPause.text = "⏸  Tạm dừng"
         } else {
-            toast("Gửi thất bại — thử kết nối lại")
-            isConnected = false
-            setStatus(Status.DISCONNECTED)
+            toast("Đã xếp hàng — đang kết nối lại...")
         }
     }
 
     private fun sendCommand(command: String) {
-        val payload = JSONObject().put("command", command).toString()
-        val ok = webSocket?.send(payload) ?: false
-        if (!ok) toast("Lỗi gửi lệnh — thử kết nối lại")
+        if (ShareLinkService.currentState != ShareLinkService.ConnState.CONNECTED) {
+            toast("Chưa kết nối với máy tính")
+            return
+        }
+        val svc = Intent(this, ShareLinkService::class.java).apply {
+            action = ShareLinkService.ACTION_SEND_COMMAND
+            putExtra(ShareLinkService.EXTRA_COMMAND, command)
+        }
+        ContextCompat.startForegroundService(this, svc)
     }
 
     private fun resetControls() {
@@ -314,12 +319,4 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    override fun onDestroy() {
-        super.onDestroy()
-        autoReconnect = false
-        reconnectThread?.interrupt()
-        webSocket?.close(1000, null)
-        client.dispatcher.executorService.shutdown()
-    }
 }

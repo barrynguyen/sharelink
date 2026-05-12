@@ -552,6 +552,7 @@ class App:
         async def handler(ws):
             self.connection_count += 1
             self._set_status(True)
+            print(f"[ws] client connected from {ws.remote_address}", flush=True)
             try:
                 async for msg in ws:
                     try:
@@ -574,9 +575,13 @@ class App:
             finally:
                 self.connection_count = max(0, self.connection_count - 1)
                 self._set_status(self.connection_count > 0)
+                print(
+                    f"[ws] client disconnected: code={ws.close_code} reason={ws.close_reason!r}",
+                    flush=True,
+                )
 
         async with websockets.serve(handler, '0.0.0.0', PORT,
-                                    ping_interval=20, ping_timeout=10,
+                                    ping_interval=20, ping_timeout=30,
                                     process_request=self._http_handler):
             await asyncio.Future()
 

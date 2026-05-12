@@ -5,6 +5,10 @@ android/local.properties
 android/*.iml
 android/.idea/
 
+# Release signing — keep private, never commit
+android/*.jks
+android/*.keystore
+
 # Python
 __pycache__/
 *.pyc
