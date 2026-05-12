@@ -2,7 +2,9 @@ package com.sharelink.app
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -11,6 +13,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import java.io.File
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import okhttp3.*
@@ -78,6 +82,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            window.decorView.importantForAutofill =
+                View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        }
         setContentView(R.layout.activity_main)
 
         etIp      = findViewById(R.id.etIp)
@@ -147,14 +155,38 @@ class MainActivity : AppCompatActivity() {
                     AlertDialog.Builder(this)
                         .setTitle("Có bản cập nhật v$latest")
                         .setMessage(changelog)
-                        .setPositiveButton("Tải về") { _, _ ->
-                            if (apkUrl.isNotEmpty())
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)))
+                        .setPositiveButton("Cập nhật") { _, _ ->
+                            if (apkUrl.isNotEmpty()) downloadAndInstall(apkUrl)
                         }
                         .setNegativeButton("Để sau", null)
                         .show()
                 }
             } catch (_: Exception) {}
+        }.start()
+    }
+
+    private fun downloadAndInstall(apkUrl: String) {
+        toast("Đang tải bản cập nhật...")
+        Thread {
+            try {
+                val bytes = client.newCall(
+                    Request.Builder().url(apkUrl).build()
+                ).execute().body?.bytes() ?: run {
+                    runOnUiThread { toast("Tải thất bại") }
+                    return@Thread
+                }
+                val file = File(getExternalFilesDir(null), "ShareLink-update.apk")
+                file.writeBytes(bytes)
+                val uri = FileProvider.getUriForFile(this, "$packageName.provider", file)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                runOnUiThread { startActivity(intent) }
+            } catch (e: Exception) {
+                runOnUiThread { toast("Lỗi: ${e.message}") }
+            }
         }.start()
     }
 
