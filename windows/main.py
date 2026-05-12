@@ -491,6 +491,7 @@ class App:
                 self._set_status(self.connection_count > 0)
 
         async with websockets.serve(handler, '0.0.0.0', PORT,
+                                    ping_interval=20, ping_timeout=10,
                                     process_request=self._http_handler):
             await asyncio.Future()
 

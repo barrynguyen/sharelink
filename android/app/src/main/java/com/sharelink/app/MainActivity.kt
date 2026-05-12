@@ -46,10 +46,13 @@ class MainActivity : AppCompatActivity() {
     private var isConnected = false
     private var isVideoPlaying = false
     private var isPaused = false
+    private var autoReconnect = false
+    private var reconnectThread: Thread? = null
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
     private val wsListener = object : WebSocketListener() {
@@ -66,9 +69,10 @@ class MainActivity : AppCompatActivity() {
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             isConnected = false
             runOnUiThread {
-                setStatus(Status.ERROR, "Lỗi: ${t.message}")
+                setStatus(Status.DISCONNECTED)
                 resetControls()
             }
+            scheduleReconnect()
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -77,7 +81,18 @@ class MainActivity : AppCompatActivity() {
                 setStatus(Status.DISCONNECTED)
                 resetControls()
             }
+            scheduleReconnect()
         }
+    }
+
+    private fun scheduleReconnect() {
+        if (!autoReconnect) return
+        reconnectThread = Thread {
+            Thread.sleep(3000)
+            if (autoReconnect && !isConnected) {
+                runOnUiThread { connect(silent = true) }
+            }
+        }.also { it.isDaemon = true; it.start() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -213,9 +228,12 @@ class MainActivity : AppCompatActivity() {
         return match.value.trimEnd(')', ']', '.', ',')
     }
 
-    private fun connect() {
+    private fun connect(silent: Boolean = false) {
         val input = etIp.text.toString().trim()
-        if (input.isEmpty()) { toast("Nhập địa chỉ IP máy tính"); return }
+        if (input.isEmpty()) {
+            if (!silent) toast("Nhập địa chỉ IP máy tính")
+            return
+        }
 
         getSharedPreferences("sharelink", MODE_PRIVATE).edit()
             .putString("pc_ip", input).apply()
@@ -226,11 +244,19 @@ class MainActivity : AppCompatActivity() {
             else                      -> "ws://$input:8765"
         }
 
+        autoReconnect = true
         webSocket?.close(1000, null)
-        setStatus(Status.CONNECTING)
+        if (!silent) setStatus(Status.CONNECTING)
 
         val request = Request.Builder().url(wsUrl).build()
         webSocket = client.newWebSocket(request, wsListener)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (autoReconnect && !isConnected && etIp.text.isNotEmpty()) {
+            connect(silent = true)
+        }
     }
 
     private fun sendUrl(url: String) {
@@ -291,6 +317,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        autoReconnect = false
+        reconnectThread?.interrupt()
         webSocket?.close(1000, null)
         client.dispatcher.executorService.shutdown()
     }
