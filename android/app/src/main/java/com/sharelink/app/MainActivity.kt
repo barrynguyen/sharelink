@@ -17,7 +17,7 @@ import okhttp3.*
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-private const val UPDATE_URL = "" // VD: https://raw.githubusercontent.com/user/sharelink/main/version.json
+private const val UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 
 class MainActivity : AppCompatActivity() {
 

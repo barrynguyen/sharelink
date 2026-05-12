@@ -1,7 +1,7 @@
 {
   "version": "1.3.0",
   "changelog": "Thêm scan QR, nút Fullscreen, Marionette fullscreen Windows, fix autofill",
-  "android_url": "",
-  "windows_url": "",
-  "mac_url": ""
+  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.3.0/ShareLink.apk",
+  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.3.0/sharelink-windows.zip",
+  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.3.0/sharelink-mac.zip"
 }

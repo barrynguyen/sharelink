@@ -22,7 +22,7 @@ except ImportError:
     HAS_QR = False
 
 VERSION = "1.3.0"
-UPDATE_URL = ""  # VD: https://raw.githubusercontent.com/user/sharelink/main/version.json
+UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 PORT = 8765
 MARIONETTE_PORT = 2828
 
