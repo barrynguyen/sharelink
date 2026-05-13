@@ -1,7 +1,7 @@
 {
   "version": "1.6.1",
   "changelog": "Fix Mac/Windows không đổi video ở các lần share sau lần đầu. Dùng Marionette WebDriver:Navigate trực tiếp thay vì AppleScript keystroke / clipboard paste — work cả khi Firefox đang fullscreen.",
-  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/ShareLink.apk",
+  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.1/ShareLink.apk",
   "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.1/sharelink-windows.zip",
   "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.1/sharelink-mac.zip"
 }
