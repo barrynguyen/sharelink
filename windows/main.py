@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 PORT = 8765
 MARIONETTE_PORT = 2828
@@ -212,6 +212,37 @@ def marionette_skip_ad():
                      {"script": SKIP_AD_JS, "args": []})
         s.close()
         return bool(r and r[2] is None and r[3])
+    except Exception:
+        return False
+
+
+def marionette_navigate(url):
+    """Điều hướng tab Firefox sang URL mới qua Marionette (không cần keystroke)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5)
+        s.connect(('127.0.0.1', MARIONETTE_PORT))
+        _mar_recv(s)
+
+        r = None
+        for _ in range(5):
+            r = _mar_cmd(s, 1, "WebDriver:NewSession", {"capabilities": {}})
+            if r and r[2] is None:
+                break
+            time.sleep(1.0)
+        if not r or r[2] is not None:
+            s.close()
+            return False
+
+        wins = _mar_cmd(s, 2, "WebDriver:GetWindowHandles", {})
+        if not wins or not wins[3]:
+            s.close()
+            return False
+        _mar_cmd(s, 3, "WebDriver:SwitchToWindow",
+                 {"handle": wins[3][0], "focus": True})
+        r = _mar_cmd(s, 4, "WebDriver:Navigate", {"url": url})
+        s.close()
+        return bool(r and r[2] is None)
     except Exception:
         return False
 
@@ -496,17 +527,23 @@ class App:
 
         def open_and_maximize():
             if marionette_ready():
-                # Firefox đang chạy với --marionette → navigate trong tab
-                self._focus_browser()
-                subprocess.run('clip', input=url.encode(), check=False)
-                key_combo(VK_CTRL, VK_L)
-                time.sleep(0.4)
-                key_combo(VK_CTRL, VK_V)
-                time.sleep(0.1)
-                keypress(VK_RETURN)
-                self._wait_for_video(timeout=25)
-                time.sleep(0.5)
-                self._fullscreen_video_player()
+                # Firefox đang chạy với --marionette → navigate trực tiếp qua Marionette
+                if marionette_navigate(url):
+                    self._wait_for_video(timeout=25)
+                    time.sleep(0.5)
+                    self._fullscreen_video_player()
+                else:
+                    # Fallback keystroke
+                    self._focus_browser()
+                    subprocess.run('clip', input=url.encode(), check=False)
+                    key_combo(VK_CTRL, VK_L)
+                    time.sleep(0.4)
+                    key_combo(VK_CTRL, VK_V)
+                    time.sleep(0.1)
+                    keypress(VK_RETURN)
+                    self._wait_for_video(timeout=25)
+                    time.sleep(0.5)
+                    self._fullscreen_video_player()
             elif self._focus_browser():
                 # Firefox đang chạy nhưng không có Marionette → restart
                 subprocess.run(['taskkill', '/F', '/IM', 'firefox.exe'],

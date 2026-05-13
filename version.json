@@ -1,7 +1,7 @@
 {
-  "version": "1.6.0",
-  "changelog": "Hacker theme: nền đen, chữ phosphor green, font monospace. Header >_ SHARELINK, label [HOST] [PAYLOAD] [CONTROL] kiểu terminal. Áp dụng cho cả Android, Mac, Windows.",
+  "version": "1.6.1",
+  "changelog": "Fix Mac/Windows không đổi video ở các lần share sau lần đầu. Dùng Marionette WebDriver:Navigate trực tiếp thay vì AppleScript keystroke / clipboard paste — work cả khi Firefox đang fullscreen.",
   "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/ShareLink.apk",
-  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/sharelink-windows.zip",
-  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/sharelink-mac.zip"
+  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.1/sharelink-windows.zip",
+  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.1/sharelink-mac.zip"
 }

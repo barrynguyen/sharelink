@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 PORT = 8765
 MARIONETTE_PORT = 2828
@@ -180,6 +180,38 @@ def marionette_skip_ad():
                      {"script": SKIP_AD_JS, "args": []})
         s.close()
         return bool(r and r[2] is None and r[3])
+    except Exception:
+        return False
+
+
+def marionette_navigate(url):
+    """Điều hướng tab Firefox sang URL mới qua Marionette.
+    Không phụ thuộc keystroke nên work cả khi Firefox đang fullscreen."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5)
+        s.connect(('127.0.0.1', MARIONETTE_PORT))
+        _mar_recv(s)
+
+        r = None
+        for _ in range(5):
+            r = _mar_cmd(s, 1, "WebDriver:NewSession", {"capabilities": {}})
+            if r and r[2] is None:
+                break
+            time.sleep(1.0)
+        if not r or r[2] is not None:
+            s.close()
+            return False
+
+        wins = _mar_cmd(s, 2, "WebDriver:GetWindowHandles", {})
+        if not wins or not wins[3]:
+            s.close()
+            return False
+        _mar_cmd(s, 3, "WebDriver:SwitchToWindow",
+                 {"handle": wins[3][0], "focus": True})
+        r = _mar_cmd(s, 4, "WebDriver:Navigate", {"url": url})
+        s.close()
+        return bool(r and r[2] is None)
     except Exception:
         return False
 
@@ -408,7 +440,12 @@ class App:
         self._update_controls()
 
     def _navigate_firefox(self, url):
-        # Copy URL vào clipboard rồi paste vào address bar
+        # Ưu tiên Marionette — không cần keystroke, work cả khi đang fullscreen
+        if marionette_navigate(url):
+            time.sleep(2.5)
+            self._fullscreen_video_player()
+            return
+        # Fallback: clipboard + Cmd-L + paste + Enter qua AppleScript
         proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
         proc.communicate(url.encode())
         osascript('''
