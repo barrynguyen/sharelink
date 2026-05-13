@@ -25,7 +25,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-private const val UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
+private const val UPDATE_URL = "https://api.github.com/repos/barrynguyen/sharelink/releases/latest"
 
 class MainActivity : AppCompatActivity() {
 
@@ -194,10 +194,23 @@ class MainActivity : AppCompatActivity() {
                 if (!resp.isSuccessful) return@Thread
                 val body = resp.body?.string() ?: return@Thread
                 val json = JSONObject(body)
-                val latest = json.getString("version")
-                if (latest == current) return@Thread
-                val changelog = json.optString("changelog", "")
-                val apkUrl = json.optString("android_url", "")
+                // GitHub Releases API: tag_name like "v1.6.1", body = changelog markdown,
+                // assets[].browser_download_url for binaries
+                val tag = json.optString("tag_name", "")
+                val latest = tag.removePrefix("v").trim()
+                if (latest.isEmpty() || latest == current) return@Thread
+                val changelog = json.optString("body", "").take(400)
+                val assets = json.optJSONArray("assets")
+                var apkUrl = ""
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val a = assets.getJSONObject(i)
+                        if (a.optString("name").endsWith(".apk", ignoreCase = true)) {
+                            apkUrl = a.optString("browser_download_url")
+                            break
+                        }
+                    }
+                }
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     AlertDialog.Builder(this)

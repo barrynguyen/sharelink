@@ -21,8 +21,8 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.6.1"
-UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
+VERSION = "1.6.2"
+UPDATE_URL = "https://api.github.com/repos/barrynguyen/sharelink/releases/latest"
 PORT = 8765
 MARIONETTE_PORT = 2828
 
@@ -170,13 +170,28 @@ def check_for_update():
         return None
     try:
         import urllib.request
-        with urllib.request.urlopen(UPDATE_URL, timeout=5) as r:
-            data = json.loads(r.read().decode())
-        if data.get("version", "") != VERSION:
-            return data
+        req = urllib.request.Request(
+            UPDATE_URL,
+            headers={"User-Agent": f"ShareLink/{VERSION}", "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            release = json.loads(r.read().decode())
+        latest = release.get("tag_name", "").lstrip("v").strip()
+        if not latest or latest == VERSION:
+            return None
+        windows_url = ""
+        for a in release.get("assets") or []:
+            name = a.get("name", "")
+            if name.endswith(".zip") and "windows" in name.lower():
+                windows_url = a.get("browser_download_url", "")
+                break
+        return {
+            "version": latest,
+            "changelog": (release.get("body") or "")[:400],
+            "windows_url": windows_url,
+        }
     except Exception:
-        pass
-    return None
+        return None
 
 
 def marionette_ready():
