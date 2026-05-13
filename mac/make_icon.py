@@ -18,7 +18,15 @@ def draw_master(size: int) -> Image.Image:
     d.rounded_rectangle(
         [(0, 0), (size - 1, size - 1)],
         radius=radius,
-        fill=(25, 118, 210, 255),  # Material Blue 700
+        fill=(0, 0, 0, 255),  # pure black
+    )
+    # Inner phosphor-green ring for that CRT terminal glow
+    border = max(2, int(size * 0.012))
+    d.rounded_rectangle(
+        [(border, border), (size - 1 - border, size - 1 - border)],
+        radius=radius - border,
+        outline=(0, 255, 65, 255),  # Matrix green
+        width=border,
     )
     # Cast symbol: outer screen rectangle (rounded, outline) + 3 wifi arcs in corner
     pad = int(size * 0.18)
@@ -27,7 +35,7 @@ def draw_master(size: int) -> Image.Image:
     d.rounded_rectangle(
         screen_box,
         radius=int(size * 0.04),
-        outline=(255, 255, 255, 255),
+        outline=(0, 255, 65, 255),
         width=line_w,
     )
     # Wifi arcs at bottom-left of the screen — three concentric squares
@@ -43,13 +51,13 @@ def draw_master(size: int) -> Image.Image:
             d.ellipse(
                 [origin_x - line_w, origin_y - line_w, origin_x + line_w * 2,
                  origin_y + line_w * 2],
-                fill=(255, 255, 255, 255),
+                fill=(0, 255, 65, 255),
             )
         else:
             d.arc(
                 [origin_x - sz, origin_y - sz, origin_x + sz, origin_y + sz],
                 start=270, end=360,
-                fill=(255, 255, 255, 255),
+                fill=(0, 255, 65, 255),
                 width=line_w,
             )
     return img

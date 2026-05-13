@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         when (state) {
             ShareLinkService.ConnState.CONNECTED -> {
                 setStatus(Status.CONNECTED)
-                btnConnect.text = "Kết nối lại"
+                btnConnect.text = "RECONNECT"
             }
             ShareLinkService.ConnState.CONNECTING -> {
                 setStatus(Status.CONNECTING)
@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         btnPause.setOnClickListener {
             sendCommand("pause")
             isPaused = !isPaused
-            btnPause.text = if (isPaused) "▶  Tiếp tục" else "⏸  Tạm dừng"
+            btnPause.text = if (isPaused) "▶  resume" else "⏸  pause"
         }
 
         btnStop.setOnClickListener {
@@ -289,7 +289,7 @@ class MainActivity : AppCompatActivity() {
             isVideoPlaying = true
             isPaused = false
             setControlsEnabled(true)
-            btnPause.text = "⏸  Tạm dừng"
+            btnPause.text = "⏸  pause"
         } else {
             toast("Đã xếp hàng — đang kết nối lại...")
         }
@@ -311,7 +311,7 @@ class MainActivity : AppCompatActivity() {
         isVideoPlaying = false
         isPaused = false
         setControlsEnabled(false)
-        btnPause.text = "⏸  Tạm dừng"
+        btnPause.text = "⏸  pause"
     }
 
     private fun setControlsEnabled(enabled: Boolean) {
@@ -328,10 +328,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun setStatus(s: Status, msg: String? = null) {
         val (text, color) = when (s) {
-            Status.CONNECTING   -> "Đang kết nối..."  to "#FFC107"
-            Status.CONNECTED    -> "Đã kết nối"       to "#4CAF50"
-            Status.DISCONNECTED -> "Chưa kết nối"     to "#F44336"
-            Status.ERROR        -> (msg ?: "Lỗi kết nối") to "#F44336"
+            Status.CONNECTING   -> "connecting..."         to "#FFEB3B"
+            Status.CONNECTED    -> "linked"                to "#00FF41"
+            Status.DISCONNECTED -> "offline"               to "#FF3030"
+            Status.ERROR        -> (msg ?: "error")        to "#FF3030"
         }
         tvStatus.text = text
         statusDot.backgroundTintList =

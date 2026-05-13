@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.5.3"
+VERSION = "1.6.0"
 UPDATE_URL = "https://raw.githubusercontent.com/barrynguyen/sharelink/main/version.json"
 PORT = 8765
 MARIONETTE_PORT = 2828
@@ -275,7 +275,7 @@ class App:
 
         self.ip = get_local_ip()
         self.connection_count = 0
-        self.status_var = tk.StringVar(value="Đang chờ kết nối...")
+        self.status_var = tk.StringVar(value="waiting for client...")
         self.last_url_var = tk.StringVar(value="—")
         self._is_playing = False
         self._paused = False
@@ -287,29 +287,44 @@ class App:
         threading.Thread(target=self._check_update, daemon=True).start()
 
     def _build_ui(self):
-        tk.Label(self.root, text="ShareLink", font=('Helvetica', 26, 'bold'),
-                 bg='#1a1a2e', fg='#e94560').pack(pady=(20, 2))
-        tk.Label(self.root, text="Nhận video từ điện thoại & phát toàn màn hình",
-                 font=('Helvetica', 10), bg='#1a1a2e', fg='#7a7a9a').pack()
-        tk.Label(self.root, text=f"v{VERSION}",
-                 font=('Helvetica', 8), bg='#1a1a2e', fg='#303050').pack()
+        BG = '#000000'
+        PANEL = '#0a0f0a'
+        GREEN = '#00FF41'
+        GREEN_DIM = '#00B82E'
+        GREEN_MUTE = '#1a8c1a'
+        GREEN_DEEP = '#0d4a0d'
+        RED = '#FF3030'
+        MONO = 'Consolas'
 
-        card = tk.Frame(self.root, bg='#16213e', padx=14, pady=10)
-        card.pack(fill='x', padx=24, pady=(18, 0))
-        tk.Label(card, text="Địa chỉ IP — nhập vào app Android",
-                 font=('Helvetica', 9), bg='#16213e', fg='#7a7a9a').pack(anchor='w')
-        row = tk.Frame(card, bg='#16213e')
-        row.pack(fill='x', pady=(4, 0))
-        tk.Label(row, text=f"{self.ip}:{PORT}", font=('Courier', 17, 'bold'),
-                 bg='#16213e', fg='#e94560').pack(side='left')
-        tk.Button(row, text="Copy", font=('Helvetica', 9),
-                  bg='#0f3460', fg='white', relief='flat',
-                  padx=8, pady=3, cursor='hand2',
+        self.root.configure(bg=BG)
+
+        header = tk.Frame(self.root, bg=BG)
+        header.pack(fill='x', padx=22, pady=(18, 14), anchor='w')
+        tk.Label(header, text=">_ SHARELINK",
+                 font=(MONO, 22, 'bold'), bg=BG, fg=GREEN,
+                 anchor='w').pack(anchor='w')
+        tk.Label(header, text="// stream.video --to=display",
+                 font=(MONO, 10), bg=BG, fg=GREEN_MUTE,
+                 anchor='w').pack(anchor='w', pady=(2, 0))
+
+        card = tk.Frame(self.root, bg=PANEL, padx=12, pady=10,
+                        highlightthickness=1, highlightbackground='#1f3a1f')
+        card.pack(fill='x', padx=22, pady=(0, 10))
+        tk.Label(card, text="[ HOST ]", font=(MONO, 9, 'bold'),
+                 bg=PANEL, fg=GREEN_DIM).pack(anchor='w')
+        row = tk.Frame(card, bg=PANEL)
+        row.pack(fill='x', pady=(6, 0))
+        tk.Label(row, text=f"{self.ip}:{PORT}", font=(MONO, 16, 'bold'),
+                 bg=PANEL, fg=GREEN).pack(side='left')
+        tk.Button(row, text="copy", font=(MONO, 9),
+                  bg=PANEL, fg=GREEN, activebackground='#0d4a0d',
+                  activeforeground=GREEN, relief='solid', bd=1,
+                  padx=8, pady=2, cursor='hand2',
                   command=self._copy_ip).pack(side='right')
 
         if HAS_QR:
-            qr_card = tk.Frame(self.root, bg='#16213e')
-            qr_card.pack(pady=12)
+            qr_card = tk.Frame(self.root, bg=BG)
+            qr_card.pack(pady=(2, 8))
             qr = qrcode.QRCode(box_size=6, border=3,
                                error_correction=qrcode.constants.ERROR_CORRECT_M)
             qr.add_data(f"{self.ip}:{PORT}")
@@ -317,45 +332,57 @@ class App:
             img = qr.make_image(fill_color="black", back_color="white")
             self._qr_img = ImageTk.PhotoImage(img)
             tk.Label(qr_card, image=self._qr_img, bg='white', bd=0).pack()
-            tk.Label(qr_card, text="Hoặc scan QR bằng app Android",
-                     font=('Helvetica', 9), bg='#1a1a2e', fg='#7a7a9a').pack(pady=(4, 0))
+            tk.Label(qr_card, text="// scan with android app",
+                     font=(MONO, 9), bg=BG, fg=GREEN_MUTE).pack(pady=(6, 0))
         else:
             tk.Label(self.root,
-                     text="(Cài qrcode + Pillow để hiện QR)\npip install qrcode pillow",
-                     font=('Helvetica', 9), bg='#1a1a2e', fg='#505070',
+                     text="(install qrcode + Pillow for QR)\npip install qrcode pillow",
+                     font=(MONO, 9), bg=BG, fg=GREEN_DEEP,
                      justify='center').pack(pady=14)
 
-        status_card = tk.Frame(self.root, bg='#16213e', padx=14, pady=10)
-        status_card.pack(fill='x', padx=24, pady=(0, 8))
-        row2 = tk.Frame(status_card, bg='#16213e')
-        row2.pack(fill='x')
-        self._dot = tk.Label(row2, text='●', font=('Helvetica', 13),
-                             bg='#16213e', fg='#e53935')
+        status_card = tk.Frame(self.root, bg=PANEL, padx=12, pady=10,
+                               highlightthickness=1, highlightbackground='#1f3a1f')
+        status_card.pack(fill='x', padx=22, pady=(0, 10))
+        tk.Label(status_card, text="[ STATUS ]", font=(MONO, 9, 'bold'),
+                 bg=PANEL, fg=GREEN_DIM).pack(anchor='w')
+        row2 = tk.Frame(status_card, bg=PANEL)
+        row2.pack(fill='x', pady=(6, 0))
+        self._dot = tk.Label(row2, text='●', font=(MONO, 13),
+                             bg=PANEL, fg=RED)
         self._dot.pack(side='left')
-        tk.Label(row2, textvariable=self.status_var, font=('Helvetica', 10),
-                 bg='#16213e', fg='#a0a0b8').pack(side='left', padx=(5, 0))
-        tk.Label(status_card, text="Video gần nhất:",
-                 font=('Helvetica', 9), bg='#16213e', fg='#7a7a9a').pack(anchor='w', pady=(6, 0))
+        tk.Label(row2, textvariable=self.status_var, font=(MONO, 11),
+                 bg=PANEL, fg=GREEN).pack(side='left', padx=(6, 0))
+        tk.Label(status_card, text="// last payload:",
+                 font=(MONO, 9), bg=PANEL, fg=GREEN_MUTE).pack(anchor='w', pady=(8, 0))
         tk.Label(status_card, textvariable=self.last_url_var,
-                 font=('Helvetica', 9), bg='#16213e', fg='#4fc3f7',
+                 font=(MONO, 9), bg=PANEL, fg=GREEN,
                  wraplength=320, justify='left').pack(anchor='w')
 
-        ctrl = tk.Frame(status_card, bg='#16213e')
+        ctrl = tk.Frame(status_card, bg=PANEL)
         ctrl.pack(fill='x', pady=(10, 0))
-        self._btn_pause = tk.Button(ctrl, text="⏸  Tạm dừng",
-                                    font=('Helvetica', 10), state='disabled',
-                                    bg='#0f3460', fg='white', relief='flat',
-                                    padx=10, pady=6, cursor='hand2',
+        self._btn_pause = tk.Button(ctrl, text="⏸  pause",
+                                    font=(MONO, 10), state='disabled',
+                                    bg=PANEL, fg=GREEN, relief='solid', bd=1,
+                                    disabledforeground=GREEN_DEEP,
+                                    activebackground='#0d4a0d',
+                                    activeforeground=GREEN,
+                                    padx=10, pady=5, cursor='hand2',
                                     command=lambda: threading.Thread(
                                         target=self._toggle_pause, daemon=True).start())
         self._btn_pause.pack(side='left', padx=(0, 8))
-        self._btn_stop = tk.Button(ctrl, text="⏹  Đóng video",
-                                   font=('Helvetica', 10), state='disabled',
-                                   bg='#5a1a1a', fg='white', relief='flat',
-                                   padx=10, pady=6, cursor='hand2',
+        self._btn_stop = tk.Button(ctrl, text="⏹  kill",
+                                   font=(MONO, 10), state='disabled',
+                                   bg=PANEL, fg=RED, relief='solid', bd=1,
+                                   disabledforeground='#5a1a1a',
+                                   activebackground='#2a0a0a',
+                                   activeforeground=RED,
+                                   padx=10, pady=5, cursor='hand2',
                                    command=lambda: threading.Thread(
                                        target=self._stop_video, daemon=True).start())
         self._btn_stop.pack(side='left')
+
+        tk.Label(self.root, text=f"// v{VERSION}",
+                 font=(MONO, 8), bg=BG, fg=GREEN_DEEP).pack(pady=(4, 8))
 
         if not find_firefox():
             warn = tk.Frame(self.root, bg='#3a1a00', padx=12, pady=8)
@@ -535,11 +562,11 @@ class App:
     def _set_status(self, connected, url=None):
         def _do():
             if connected:
-                self.status_var.set(f"Đã kết nối ({self.connection_count} thiết bị)")
-                self._dot.config(fg='#43a047')
+                self.status_var.set(f"linked [{self.connection_count}]")
+                self._dot.config(fg='#00FF41')
             else:
-                self.status_var.set("Đang chờ kết nối...")
-                self._dot.config(fg='#e53935')
+                self.status_var.set("waiting for client...")
+                self._dot.config(fg='#FF3030')
             if url:
                 display = url if len(url) <= 55 else url[:52] + "..."
                 self.last_url_var.set(display)

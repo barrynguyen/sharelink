@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#1a1a2e"
+    android:background="#000000"
     android:fillViewport="true"
     android:importantForAutofill="noExcludeDescendants">
 
@@ -10,28 +10,29 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="20dp">
 
-        <!-- Header -->
+        <!-- Terminal header -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ShareLink"
-            android:textSize="32sp"
+            android:text="&gt;_ SHARELINK"
+            android:textSize="26sp"
             android:textStyle="bold"
-            android:textColor="#e94560"
-            android:layout_gravity="center"
-            android:paddingTop="16dp"
-            android:paddingBottom="4dp" />
+            android:textColor="#00FF41"
+            android:fontFamily="monospace"
+            android:layout_gravity="start"
+            android:paddingTop="12dp"
+            android:paddingBottom="2dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Gửi video tới màn hình lớn"
-            android:textSize="13sp"
-            android:textColor="#7a7a9a"
-            android:layout_gravity="center"
-            android:paddingBottom="28dp" />
+            android:text="// stream.video --to=display"
+            android:textSize="11sp"
+            android:textColor="#1a8c1a"
+            android:fontFamily="monospace"
+            android:paddingBottom="20dp" />
 
         <!-- Card: Kết nối -->
         <LinearLayout
@@ -39,16 +40,17 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="@drawable/card_bg"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp">
+            android:padding="14dp"
+            android:layout_marginBottom="12dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MÁY TÍNH"
+                android:text="[ HOST ]"
                 android:textSize="11sp"
-                android:letterSpacing="0.1"
-                android:textColor="#7a7a9a"
+                android:letterSpacing="0.15"
+                android:textColor="#00B82E"
+                android:fontFamily="monospace"
                 android:paddingBottom="8dp" />
 
             <LinearLayout
@@ -56,20 +58,20 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
+                android:layout_marginBottom="10dp">
 
                 <EditText
                     android:id="@+id/etIp"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="44dp"
                     android:layout_weight="1"
-                    android:hint="192.168.1.x:8765"
-                    android:textColorHint="#404060"
-                    android:textColor="#ffffff"
+                    android:hint="192.168.x.x:8765"
+                    android:textColorHint="#0d4a0d"
+                    android:textColor="#00FF41"
                     android:inputType="text"
                     android:background="@drawable/input_bg"
-                    android:paddingHorizontal="12dp"
-                    android:textSize="15sp"
+                    android:paddingHorizontal="10dp"
+                    android:textSize="14sp"
                     android:fontFamily="monospace"
                     android:singleLine="true"
                     android:importantForAutofill="no"
@@ -78,25 +80,28 @@
 
                 <Button
                     android:id="@+id/btnScanQr"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="8dp"
-                    android:text="⬛"
-                    android:backgroundTint="#16213e"
-                    android:textColor="#e94560"
-                    android:textSize="20sp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="6dp"
+                    android:text="▦"
+                    android:backgroundTint="#0a0f0a"
+                    android:textColor="#00FF41"
+                    android:textSize="22sp"
                     android:padding="0dp" />
 
                 <Button
                     android:id="@+id/btnConnect"
                     android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="Kết nối"
-                    android:layout_marginStart="8dp"
-                    android:backgroundTint="#e94560"
-                    android:textColor="#ffffff"
-                    android:textSize="13sp"
-                    android:paddingHorizontal="16dp" />
+                    android:layout_height="44dp"
+                    android:text="CONNECT"
+                    android:layout_marginStart="6dp"
+                    android:backgroundTint="#00B82E"
+                    android:textColor="#000000"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace"
+                    android:paddingHorizontal="14dp"
+                    android:letterSpacing="0.1" />
             </LinearLayout>
 
             <!-- Status row -->
@@ -108,18 +113,19 @@
 
                 <View
                     android:id="@+id/statusDot"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
                     android:background="@drawable/circle"
-                    android:backgroundTint="#F44336" />
+                    android:backgroundTint="#FF3030" />
 
                 <TextView
                     android:id="@+id/tvStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Chưa kết nối"
+                    android:text="offline"
                     android:textSize="12sp"
-                    android:textColor="#a0a0b8"
+                    android:textColor="#1a8c1a"
+                    android:fontFamily="monospace"
                     android:paddingStart="8dp" />
             </LinearLayout>
         </LinearLayout>
@@ -130,31 +136,33 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="@drawable/card_bg"
-            android:padding="16dp"
-            android:layout_marginBottom="20dp">
+            android:padding="14dp"
+            android:layout_marginBottom="12dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LINK VIDEO"
+                android:text="[ PAYLOAD ]"
                 android:textSize="11sp"
-                android:letterSpacing="0.1"
-                android:textColor="#7a7a9a"
+                android:letterSpacing="0.15"
+                android:textColor="#00B82E"
+                android:fontFamily="monospace"
                 android:paddingBottom="8dp" />
 
             <EditText
                 android:id="@+id/etUrl"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Dán link YouTube, TikTok, Facebook..."
-                android:textColorHint="#404060"
-                android:textColor="#ffffff"
+                android:hint="https://..."
+                android:textColorHint="#0d4a0d"
+                android:textColor="#00FF41"
                 android:inputType="textUri"
                 android:background="@drawable/input_bg"
-                android:padding="12dp"
-                android:textSize="13sp"
+                android:padding="10dp"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
                 android:minLines="2"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="10dp"
                 android:importantForAutofill="no"
                 android:autofillHints=""
                 android:privateImeOptions="nm" />
@@ -162,13 +170,14 @@
             <Button
                 android:id="@+id/btnShare"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="PHÁT TRÊN MÀN HÌNH LỚN"
-                android:backgroundTint="#e94560"
-                android:textColor="#ffffff"
+                android:layout_height="50dp"
+                android:text="&gt; EXECUTE"
+                android:backgroundTint="#00FF41"
+                android:textColor="#000000"
                 android:textStyle="bold"
                 android:textSize="14sp"
-                android:letterSpacing="0.05" />
+                android:fontFamily="monospace"
+                android:letterSpacing="0.2" />
         </LinearLayout>
 
         <!-- Card: Điều khiển -->
@@ -177,29 +186,31 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="@drawable/card_bg"
-            android:padding="16dp"
-            android:layout_marginBottom="20dp">
+            android:padding="14dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ĐIỀU KHIỂN"
+                android:text="[ CONTROL ]"
                 android:textSize="11sp"
-                android:letterSpacing="0.1"
-                android:textColor="#7a7a9a"
-                android:paddingBottom="12dp" />
+                android:letterSpacing="0.15"
+                android:textColor="#00B82E"
+                android:fontFamily="monospace"
+                android:paddingBottom="10dp" />
 
             <Button
                 android:id="@+id/btnFullscreen"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="⛶  Toàn màn hình"
-                android:backgroundTint="#0f3460"
-                android:textColor="#ffffff"
-                android:textSize="13sp"
+                android:layout_height="44dp"
+                android:text="⛶  fullscreen"
+                android:backgroundTint="#0a0f0a"
+                android:textColor="#00FF41"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
                 android:enabled="false"
                 android:alpha="0.45"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginBottom="6dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -209,25 +220,27 @@
                 <Button
                     android:id="@+id/btnPause"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="44dp"
                     android:layout_weight="1"
-                    android:text="⏸  Tạm dừng"
-                    android:backgroundTint="#0f3460"
-                    android:textColor="#ffffff"
-                    android:textSize="13sp"
+                    android:text="⏸  pause"
+                    android:backgroundTint="#0a0f0a"
+                    android:textColor="#00FF41"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
                     android:enabled="false"
                     android:alpha="0.45"
-                    android:layout_marginEnd="8dp" />
+                    android:layout_marginEnd="6dp" />
 
                 <Button
                     android:id="@+id/btnStop"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="44dp"
                     android:layout_weight="1"
-                    android:text="⏹  Đóng video"
-                    android:backgroundTint="#5a1a1a"
-                    android:textColor="#ffffff"
-                    android:textSize="13sp"
+                    android:text="⏹  kill"
+                    android:backgroundTint="#0a0f0a"
+                    android:textColor="#FF3030"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
                     android:enabled="false"
                     android:alpha="0.45" />
             </LinearLayout>
@@ -237,9 +250,10 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Mẹo: Bấm chia sẻ trong Chrome, YouTube, TikTok rồi chọn ShareLink để gửi nhanh"
+            android:text="// share &gt; sharelink — bypass copy/paste"
             android:textSize="11sp"
-            android:textColor="#505070"
+            android:textColor="#1a8c1a"
+            android:fontFamily="monospace"
             android:layout_gravity="center"
             android:gravity="center"
             android:paddingHorizontal="8dp" />
@@ -249,10 +263,11 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="10sp"
-            android:textColor="#505070"
+            android:textColor="#0d4a0d"
+            android:fontFamily="monospace"
             android:layout_gravity="center"
-            android:paddingTop="12dp"
-            android:paddingBottom="8dp" />
+            android:paddingTop="10dp"
+            android:paddingBottom="6dp" />
 
     </LinearLayout>
 </ScrollView>

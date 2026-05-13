@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#e94560</color>
-    <color name="background">#1a1a2e</color>
-    <color name="surface">#16213e</color>
+    <!-- Hacker / Matrix terminal palette -->
+    <color name="primary">#00FF41</color>
+    <color name="primary_dim">#00B82E</color>
+    <color name="accent">#39FF14</color>
+    <color name="background">#000000</color>
+    <color name="surface">#0a0f0a</color>
+    <color name="border">#1f3a1f</color>
+    <color name="text_dim">#1a8c1a</color>
+    <color name="text_mute">#0d4a0d</color>
+    <color name="error">#FF3030</color>
 </resources>

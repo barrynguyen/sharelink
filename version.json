@@ -1,7 +1,7 @@
 {
-  "version": "1.5.4",
-  "changelog": "Sửa lỗi không nhận được dialog cập nhật khi app vẫn chạy trong RAM. Update check chạy lại mỗi lần app vào foreground (debounce 60s).",
-  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.4/ShareLink.apk",
-  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.3/sharelink-windows.zip",
-  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.5.3/sharelink-mac.zip"
+  "version": "1.6.0",
+  "changelog": "Hacker theme: nền đen, chữ phosphor green, font monospace. Header >_ SHARELINK, label [HOST] [PAYLOAD] [CONTROL] kiểu terminal. Áp dụng cho cả Android, Mac, Windows.",
+  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/ShareLink.apk",
+  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/sharelink-windows.zip",
+  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.6.0/sharelink-mac.zip"
 }
