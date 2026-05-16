@@ -1,3 +1,3 @@
 #!/bin/sh
-GRADLE_HOME=/tmp/gradle-8.4
+GRADLE_HOME=/Users/vanhien/.gradle/wrapper/dists/gradle-8.11.1-bin/bpt9gzteqjrbo1mjrsomdt32c/gradle-8.11.1
 exec "$GRADLE_HOME/bin/gradle" "$@"

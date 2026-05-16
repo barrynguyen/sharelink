@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+from websockets.sync.client import connect as ws_connect
 import http
 import subprocess
 import socket
@@ -9,6 +10,7 @@ import logging
 import time
 import ctypes
 import os
+import urllib.request
 import tkinter as tk
 import tkinter.messagebox
 
@@ -21,10 +23,32 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.6.2"
+VERSION = "1.7.0"
 UPDATE_URL = "https://api.github.com/repos/barrynguyen/sharelink/releases/latest"
 PORT = 8765
 MARIONETTE_PORT = 2828
+CDP_PORT = 9222
+
+APP_DATA_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ShareLink')
+CONFIG_PATH = os.path.join(APP_DATA_DIR, 'config.json')
+EDGE_PROFILE_DIR = os.path.join(APP_DATA_DIR, 'edge-profile')
+
+
+def load_config():
+    try:
+        with open(CONFIG_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_config(cfg):
+    try:
+        os.makedirs(APP_DATA_DIR, exist_ok=True)
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump(cfg, f)
+    except Exception:
+        pass
 
 FULLSCREEN_SELECTORS = [
     ".mgp_button.mgp_fullscreen",
@@ -46,18 +70,28 @@ SKIP_AD_JS = """
         var r = el.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
     }
+    var player = document.querySelector('.html5-video-player.ad-showing, .ad-interrupting');
+    if (player) {
+        var v = player.querySelector('video');
+        if (v && isFinite(v.duration) && v.duration > 0 && v.currentTime < v.duration - 0.5) {
+            try { v.currentTime = v.duration; return 'SEEK'; } catch(e) {}
+        }
+    }
     function tryDoc(doc) {
         var sels = [
             '.ytp-skip-ad-button__action-button',
             '.ytp-skip-ad-button',
             '.ytp-ad-skip-button',
             '.ytp-ad-skip-button-modern',
-            '.videoAdUiSkipButton'
+            '.ytp-skip-button',
+            '.videoAdUiSkipButton',
+            'button[aria-label*="kip"]',
+            'button[aria-label*="\\u1ecf qua"]'
         ];
         for (var i = 0; i < sels.length; i++) {
             var els = doc.querySelectorAll(sels[i]);
             for (var j = 0; j < els.length; j++) {
-                if (visible(els[j])) { fire(els[j]); return true; }
+                if (visible(els[j])) { fire(els[j]); return 'CLICK:' + sels[i]; }
             }
         }
         var skipTexts = ['b\\u1ecf qua', 'skip'];
@@ -66,16 +100,17 @@ SKIP_AD_JS = """
             var text = (cands[i].textContent || '').toLowerCase().trim();
             for (var j = 0; j < skipTexts.length; j++) {
                 if (text.indexOf(skipTexts[j]) !== -1 && visible(cands[i])) {
-                    fire(cands[i]); return true;
+                    fire(cands[i]); return 'CLICK:text=' + skipTexts[j];
                 }
             }
         }
         return false;
     }
-    if (tryDoc(document)) return true;
+    var r = tryDoc(document);
+    if (r) return r;
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) {
-        try { var fd = frames[i].contentDocument; if (fd && tryDoc(fd)) return true; }
+        try { var fd = frames[i].contentDocument; if (fd) { var r2 = tryDoc(fd); if (r2) return r2; } }
         catch(e) {}
     }
     return false;
@@ -126,6 +161,25 @@ def find_firefox():
             return c
     try:
         result = subprocess.run(['where', 'firefox'], capture_output=True, text=True)
+        if result.returncode == 0:
+            path = result.stdout.strip().split('\n')[0]
+            if path:
+                return path
+    except Exception:
+        pass
+    return None
+
+
+def find_edge():
+    candidates = [
+        r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+        r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    try:
+        result = subprocess.run(['where', 'msedge'], capture_output=True, text=True)
         if result.returncode == 0:
             path = result.stdout.strip().split('\n')[0]
             if path:
@@ -226,7 +280,9 @@ def marionette_skip_ad():
         r = _mar_cmd(s, 5, "WebDriver:ExecuteScript",
                      {"script": SKIP_AD_JS, "args": []})
         s.close()
-        return bool(r and r[2] is None and r[3])
+        if r and r[2] is None:
+            return r[3]
+        return False
     except Exception:
         return False
 
@@ -311,11 +367,114 @@ def marionette_click_fullscreen():
         return False
 
 
+# ── CDP (Chrome DevTools Protocol) helper cho Edge ────────────────────────────
+
+def cdp_page_target():
+    """Trả về webSocketDebuggerUrl của tab page đầu tiên, hoặc None."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{CDP_PORT}/json")
+        with urllib.request.urlopen(req, timeout=2) as r:
+            targets = json.loads(r.read().decode())
+        for t in targets:
+            if t.get('type') == 'page' and t.get('webSocketDebuggerUrl'):
+                return t['webSocketDebuggerUrl']
+    except Exception:
+        pass
+    return None
+
+
+def cdp_ready():
+    return cdp_page_target() is not None
+
+
+def _cdp_send(ws, mid, method, params=None):
+    msg = {"id": mid, "method": method}
+    if params is not None:
+        msg["params"] = params
+    ws.send(json.dumps(msg))
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        try:
+            raw = ws.recv(timeout=1)
+        except Exception:
+            return None
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        if data.get('id') == mid:
+            return data
+    return None
+
+
+def cdp_navigate(url):
+    target = cdp_page_target()
+    if not target:
+        return False
+    try:
+        with ws_connect(target, open_timeout=3) as ws:
+            r = _cdp_send(ws, 1, "Page.navigate", {"url": url})
+            return bool(r and 'result' in r)
+    except Exception:
+        return False
+
+
+def _cdp_eval(js, return_by_value=True):
+    target = cdp_page_target()
+    if not target:
+        return None
+    try:
+        with ws_connect(target, open_timeout=3) as ws:
+            r = _cdp_send(ws, 1, "Runtime.evaluate", {
+                "expression": js,
+                "returnByValue": return_by_value,
+                "awaitPromise": False,
+            })
+            if not r:
+                return None
+            return r.get('result', {}).get('result', {}).get('value')
+    except Exception:
+        return None
+
+
+def cdp_skip_ad():
+    return _cdp_eval(SKIP_AD_JS)
+
+
+CDP_FULLSCREEN_JS = """
+(function(){
+    var sels = %s;
+    function fire(el){
+        ['mousedown','mouseup','click'].forEach(function(t){
+            el.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true}));
+        });
+    }
+    for (var i=0;i<sels.length;i++){
+        var el = document.querySelector(sels[i]);
+        if (el){ fire(el); return true; }
+    }
+    var v = document.querySelector('video');
+    if (v && v.requestFullscreen){ v.requestFullscreen(); return true; }
+    return false;
+})()
+""" % json.dumps(FULLSCREEN_SELECTORS)
+
+
+def cdp_click_fullscreen():
+    return bool(_cdp_eval(CDP_FULLSCREEN_JS))
+
+
+def cdp_toggle_pause():
+    js = ("var v=document.querySelector('video');"
+          "if(v){if(v.paused){v.play();}else{v.pause();}return true;}return false;")
+    return bool(_cdp_eval(js))
+
+
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title(f"ShareLink v{VERSION}")
-        self.root.geometry("380x560")
+        self.root.geometry("380x630")
         self.root.configure(bg='#1a1a2e')
         self.root.resizable(False, False)
 
@@ -327,6 +486,11 @@ class App:
         self._paused = False
         self._browser_hwnd = None
         self._skip_ad_active = False
+
+        self._cfg = load_config()
+        self.browser = self._cfg.get('browser', 'edge')
+        if self.browser not in ('edge', 'firefox'):
+            self.browser = 'edge'
 
         self._build_ui()
         self._start_server()
@@ -367,6 +531,25 @@ class App:
                   activeforeground=GREEN, relief='solid', bd=1,
                   padx=8, pady=2, cursor='hand2',
                   command=self._copy_ip).pack(side='right')
+
+        # Browser card
+        br_card = tk.Frame(self.root, bg=PANEL, padx=12, pady=10,
+                           highlightthickness=1, highlightbackground='#1f3a1f')
+        br_card.pack(fill='x', padx=22, pady=(0, 10))
+        tk.Label(br_card, text="[ BROWSER ]", font=(MONO, 9, 'bold'),
+                 bg=PANEL, fg=GREEN_DIM).pack(anchor='w')
+        self._browser_var = tk.StringVar(value=self.browser)
+        br_row = tk.Frame(br_card, bg=PANEL)
+        br_row.pack(fill='x', pady=(6, 0))
+        for label, val in [("edge", "edge"), ("firefox", "firefox")]:
+            tk.Radiobutton(
+                br_row, text=label, variable=self._browser_var, value=val,
+                bg=PANEL, fg=GREEN, selectcolor=PANEL,
+                activebackground=PANEL, activeforeground=GREEN,
+                highlightthickness=0,
+                font=(MONO, 11), cursor='hand2',
+                command=self._on_browser_change,
+            ).pack(side='left', padx=(0, 16))
 
         if HAS_QR:
             qr_card = tk.Frame(self.root, bg=BG)
@@ -430,10 +613,10 @@ class App:
         tk.Label(self.root, text=f"// v{VERSION}",
                  font=(MONO, 8), bg=BG, fg=GREEN_DEEP).pack(pady=(4, 8))
 
-        if not find_firefox():
+        if not find_firefox() and not find_edge():
             warn = tk.Frame(self.root, bg='#3a1a00', padx=12, pady=8)
             warn.pack(fill='x', padx=24)
-            tk.Label(warn, text="⚠ Chưa tìm thấy Firefox.\nTải tại firefox.com",
+            tk.Label(warn, text="⚠ Không tìm thấy Edge hoặc Firefox.\nCài một trong hai trình duyệt để dùng.",
                      font=('Helvetica', 9), bg='#3a1a00', fg='#ffb74d',
                      justify='left').pack(anchor='w')
 
@@ -456,6 +639,37 @@ class App:
         self.root.clipboard_append(f"{self.ip}:{PORT}")
         self.root.update()
 
+    def _on_browser_change(self):
+        self.browser = self._browser_var.get()
+        self._cfg['browser'] = self.browser
+        save_config(self._cfg)
+
+    # ── Browser dispatch ──────────────────────────────────────────────────────
+
+    def _browser_window_class(self):
+        # Edge (Chromium) dùng Chrome_WidgetWin_1; Firefox dùng MozillaWindowClass
+        return "Chrome_WidgetWin_1" if self.browser == 'edge' else "MozillaWindowClass"
+
+    def _browser_process_name(self):
+        return 'msedge.exe' if self.browser == 'edge' else 'firefox.exe'
+
+    def _browser_binary(self):
+        return find_edge() if self.browser == 'edge' else find_firefox()
+
+    def _browser_remote_ready(self):
+        return cdp_ready() if self.browser == 'edge' else marionette_ready()
+
+    def _browser_navigate(self, url):
+        return cdp_navigate(url) if self.browser == 'edge' else marionette_navigate(url)
+
+    def _browser_skip_ad(self):
+        return cdp_skip_ad() if self.browser == 'edge' else marionette_skip_ad()
+
+    def _browser_click_fullscreen(self):
+        return cdp_click_fullscreen() if self.browser == 'edge' else marionette_click_fullscreen()
+
+    # ──────────────────────────────────────────────────────────────────────────
+
     def _focus_browser(self):
         if self._browser_hwnd and user32.IsWindow(self._browser_hwnd):
             fg_hwnd = user32.GetForegroundWindow()
@@ -470,10 +684,11 @@ class App:
             return True
         return False
 
-    def _wait_for_firefox(self, timeout=10):
+    def _wait_for_browser(self, timeout=10):
+        cls = self._browser_window_class()
         deadline = time.time() + timeout
         while time.time() < deadline:
-            hwnd = user32.FindWindowW("MozillaWindowClass", None)
+            hwnd = user32.FindWindowW(cls, None)
             if hwnd and user32.IsWindowVisible(hwnd):
                 return hwnd
             time.sleep(0.3)
@@ -508,14 +723,25 @@ class App:
 
         ctypes.windll.user32.ReleaseDC(0, hdc)
 
-    def _launch_firefox(self, url):
-        firefox = find_firefox()
-        if firefox:
-            subprocess.Popen([firefox, '--marionette', url])
+    def _launch_browser(self, url):
+        binary = self._browser_binary()
+        if binary:
+            if self.browser == 'edge':
+                os.makedirs(EDGE_PROFILE_DIR, exist_ok=True)
+                subprocess.Popen([
+                    binary,
+                    f'--remote-debugging-port={CDP_PORT}',
+                    f'--user-data-dir={EDGE_PROFILE_DIR}',
+                    '--no-first-run',
+                    '--no-default-browser-check',
+                    url,
+                ])
+            else:
+                subprocess.Popen([binary, '--marionette', url])
         else:
             import webbrowser
             webbrowser.open(url)
-        hwnd = self._wait_for_firefox(timeout=10)
+        hwnd = self._wait_for_browser(timeout=10)
         if hwnd:
             self._browser_hwnd = hwnd
             time.sleep(1.0)
@@ -527,8 +753,13 @@ class App:
 
     def _ad_skip_loop(self):
         while self._skip_ad_active:
-            marionette_skip_ad()
-            time.sleep(3)
+            try:
+                r = self._browser_skip_ad()
+                if r:
+                    print(f"[skip-ad] {r}", flush=True)
+            except Exception as e:
+                print(f"[skip-ad] error: {e}", flush=True)
+            time.sleep(2)
 
     def _play_in_browser(self, url):
         self._is_playing = True
@@ -541,9 +772,9 @@ class App:
         self._update_controls()
 
         def open_and_maximize():
-            if marionette_ready():
-                # Firefox đang chạy với --marionette → navigate trực tiếp qua Marionette
-                if marionette_navigate(url):
+            if self._browser_remote_ready():
+                # Browser đang chạy với remote debugging → navigate qua Marionette/CDP
+                if self._browser_navigate(url):
                     self._wait_for_video(timeout=25)
                     time.sleep(0.5)
                     self._fullscreen_video_player()
@@ -560,22 +791,22 @@ class App:
                     time.sleep(0.5)
                     self._fullscreen_video_player()
             elif self._focus_browser():
-                # Firefox đang chạy nhưng không có Marionette → restart
-                subprocess.run(['taskkill', '/F', '/IM', 'firefox.exe'],
+                # Browser đang chạy nhưng thiếu remote protocol → restart
+                subprocess.run(['taskkill', '/F', '/IM', self._browser_process_name()],
                                capture_output=True)
                 time.sleep(1.5)
                 self._browser_hwnd = None
-                self._launch_firefox(url)
+                self._launch_browser(url)
             else:
-                # Firefox chưa chạy → mở mới với --marionette
-                self._launch_firefox(url)
+                # Browser chưa chạy → mở mới với flag remote debugging
+                self._launch_browser(url)
 
             self._update_controls()
 
         threading.Thread(target=open_and_maximize, daemon=True).start()
 
     def _fullscreen_video_player(self):
-        if not marionette_click_fullscreen():
+        if not self._browser_click_fullscreen():
             if self._focus_browser():
                 keypress(VK_ESCAPE)
                 time.sleep(0.15)
@@ -585,6 +816,11 @@ class App:
         threading.Thread(target=self._fullscreen_video_player, daemon=True).start()
 
     def _toggle_pause(self):
+        # Edge: ưu tiên CDP để không phải focus window
+        if self.browser == 'edge' and cdp_toggle_pause():
+            self._paused = not self._paused
+            self._update_controls()
+            return
         if self._focus_browser():
             keypress(VK_SPACE)
         self._paused = not self._paused
@@ -651,6 +887,13 @@ class App:
                         threading.Thread(target=self._stop_video, daemon=True).start()
                     elif command == 'fullscreen':
                         threading.Thread(target=self._trigger_fullscreen, daemon=True).start()
+                    elif command == 'set_browser':
+                        new_browser = data.get('browser', '').strip().lower()
+                        if new_browser in ('edge', 'firefox') and new_browser != self.browser:
+                            def _apply(b=new_browser):
+                                self._browser_var.set(b)
+                                self._on_browser_change()
+                            self.root.after(0, _apply)
             finally:
                 self.connection_count = max(0, self.connection_count - 1)
                 self._set_status(self.connection_count > 0)

@@ -130,6 +130,54 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Card: Browser picker -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_bg"
+            android:padding="14dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="[ BROWSER ]"
+                android:textSize="11sp"
+                android:letterSpacing="0.15"
+                android:textColor="#00B82E"
+                android:fontFamily="monospace"
+                android:paddingBottom="8dp" />
+
+            <RadioGroup
+                android:id="@+id/rgBrowser"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/rbEdge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="edge"
+                    android:textColor="#00FF41"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:buttonTint="#00FF41" />
+
+                <RadioButton
+                    android:id="@+id/rbFirefox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="firefox"
+                    android:layout_marginStart="20dp"
+                    android:textColor="#00FF41"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:buttonTint="#00FF41" />
+            </RadioGroup>
+        </LinearLayout>
+
         <!-- Card: Video URL -->
         <LinearLayout
             android:layout_width="match_parent"

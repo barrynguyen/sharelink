@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStop: Button
     private lateinit var tvStatus: TextView
     private lateinit var statusDot: View
+    private lateinit var rgBrowser: RadioGroup
 
     private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
         val content = result.contents ?: return@registerForActivityResult
@@ -92,12 +94,25 @@ class MainActivity : AppCompatActivity() {
         btnStop       = findViewById(R.id.btnStop)
         tvStatus  = findViewById(R.id.tvStatus)
         statusDot = findViewById(R.id.statusDot)
+        rgBrowser = findViewById(R.id.rgBrowser)
 
         val version = packageManager.getPackageInfo(packageName, 0).versionName
         findViewById<TextView>(R.id.tvVersion).text = "v$version"
 
         val prefs = getSharedPreferences("sharelink", MODE_PRIVATE)
         etIp.setText(prefs.getString("pc_ip", ""))
+
+        val savedBrowser = prefs.getString("browser", "edge") ?: "edge"
+        rgBrowser.check(if (savedBrowser == "firefox") R.id.rbFirefox else R.id.rbEdge)
+        rgBrowser.setOnCheckedChangeListener { _, checkedId ->
+            val browser = if (checkedId == R.id.rbFirefox) "firefox" else "edge"
+            prefs.edit().putString("browser", browser).apply()
+            val svc = Intent(this, ShareLinkService::class.java).apply {
+                action = ShareLinkService.ACTION_SEND_BROWSER
+                putExtra(ShareLinkService.EXTRA_BROWSER, browser)
+            }
+            ContextCompat.startForegroundService(this, svc)
+        }
 
         btnConnect.setOnClickListener { connect() }
         btnScanQr.setOnClickListener {

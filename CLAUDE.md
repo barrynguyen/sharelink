@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-ShareLink lets you share a video URL from your Android phone and play it fullscreen in Firefox on a Mac or Windows PC. The desktop app runs a WebSocket server; the Android app connects to it and sends URLs or remote-control commands.
+ShareLink lets you share a video URL from your Android phone and play it fullscreen in a browser (Edge or Firefox) on a Mac or Windows PC. The desktop app runs a WebSocket server; the Android app connects to it and sends URLs or remote-control commands.
 
 ## Platform structure
 
@@ -50,18 +50,22 @@ cd android
 ## Architecture & key flows
 
 **WebSocket protocol (port 8765)**
-- Android sends `{"url": "https://..."}` → desktop opens/navigates Firefox and goes fullscreen
-- Android sends `{"command": "pause|stop|fullscreen"}` → desktop controls Firefox
+- Android sends `{"url": "https://..."}` → desktop opens/navigates the chosen browser and goes fullscreen
+- Android sends `{"command": "pause|stop|fullscreen"}` → desktop controls the browser
+
+**Browser choice** — `App.browser` is `"edge"` (default) or `"firefox"`, set from a `[ BROWSER ]` radio in the UI and persisted in `config.json` (Mac: `~/Library/Application Support/ShareLink/`, Windows: `%APPDATA%\ShareLink\`). All play/navigate/fullscreen/skip-ad operations route through `_browser_*` dispatch methods that select either Marionette (Firefox) or CDP (Edge) under the hood.
 
 **Fullscreen flow (both platforms)**
-1. Launch Firefox with `--marionette` flag (enables Marionette on port 2828)
-2. Make the browser window fullscreen (AppleScript on Mac; F11 via win32 on Windows)
-3. Click the video player's fullscreen button via Marionette (CSS selectors in `FULLSCREEN_SELECTORS`)
-4. Fallback: send keypress `F` if Marionette click fails
+1. Launch browser with the right remote-debug flag — Firefox: `--marionette` (port 2828); Edge: `--remote-debugging-port=9222 --user-data-dir=<isolated profile>`
+2. Make the browser window fullscreen (AppleScript `AXFullScreen` on Mac; F11 via win32 on Windows)
+3. Click the video player's fullscreen button via the remote protocol (CSS selectors in `FULLSCREEN_SELECTORS`)
+4. Fallback: send keypress `F` if the remote click fails
 
-**Marionette protocol** — raw TCP on port 2828, length-prefixed JSON frames. Helper functions `_mar_recv` / `_mar_cmd` implement this directly without geckodriver. Used for: navigate, find element, click, execute JS (skip-ad script).
+**Marionette protocol** — raw TCP on port 2828, length-prefixed JSON frames. Helper functions `_mar_recv` / `_mar_cmd` implement this directly without geckodriver. Used for Firefox: navigate, find element, click, execute JS (skip-ad script).
 
-**Ad-skip loop** — background thread runs `marionette_skip_ad()` every 3 s while a video is playing. Uses `SKIP_AD_JS` injected via Marionette to find and click skip buttons (YouTube selectors + text-match fallback for Vietnamese "bỏ qua").
+**CDP (Chrome DevTools Protocol)** — HTTP `http://127.0.0.1:9222/json` lists targets; each target exposes a `webSocketDebuggerUrl`. Helpers `cdp_page_target`, `_cdp_send`, `cdp_navigate`, `_cdp_eval`, `cdp_click_fullscreen`, `cdp_skip_ad`, `cdp_toggle_pause` connect via `websockets.sync.client` (already bundled with `websockets>=12.0`, no extra dep). Used for Edge instead of Marionette. Edge is launched with `--user-data-dir=<EDGE_PROFILE_DIR>` so it stays separate from the user's main Edge profile.
+
+**Ad-skip loop** — background thread runs `self._browser_skip_ad()` every 3 s while a video is playing (dispatches to `marionette_skip_ad()` or `cdp_skip_ad()`). Uses `SKIP_AD_JS` injected via the remote protocol to find and click skip buttons (YouTube selectors + text-match fallback for Vietnamese "bỏ qua").
 
 **Auto-update** — all three platforms fetch `version.json` from GitHub raw on startup and prompt the user if the version differs. All platforms open the download URL in the browser (Android used to install directly but `REQUEST_INSTALL_PACKAGES` triggered Google Play Protect, so removed in v1.5.0).
 
@@ -96,8 +100,12 @@ When releasing a new version, update **all four** locations in sync:
 |---------|-----|---------|
 | Browser focus | `osascript` (AppleScript) | `ctypes.windll.user32` (win32 API) |
 | Keyboard input | AppleScript `keystroke` | `user32.keybd_event` virtual-key codes |
-| Navigate existing tab | pbcopy + Cmd-L, Cmd-V, Enter via osascript | `clip` + Ctrl-L, Ctrl-V, Enter via keybd_event |
+| Navigate existing tab (fallback) | pbcopy + Cmd-L, Cmd-V, Enter via osascript | `clip` + Ctrl-L, Ctrl-V, Enter via keybd_event |
 | Detect Firefox ready | `pgrep -xi Firefox` | `user32.FindWindowW("MozillaWindowClass", ...)` |
+| Detect Edge ready | `pgrep -xi "Microsoft Edge"` | `user32.FindWindowW("Chrome_WidgetWin_1", ...)` |
+| Firefox binary | `/Applications/Firefox.app/...` | `C:\Program Files\Mozilla Firefox\firefox.exe` |
+| Edge binary | `/Applications/Microsoft Edge.app/...` | `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe` |
+| Config + Edge profile dir | `~/Library/Application Support/ShareLink/` | `%APPDATA%\ShareLink\` |
 | Fullscreen fallback | Escape then `keystroke "f"` | Escape then `keypress(VK_F)` |
 | QR install hint | `pip3` | `pip` |
 
@@ -105,6 +113,6 @@ The Mac version also has a `_plyr` selector (`".plyr__control--overlaid"`) not p
 
 ## Dependencies
 
-- Python deps: `websockets>=12.0`, `qrcode>=7.4`, `Pillow>=10.0` (QR optional at runtime — app degrades gracefully)
+- Python deps: `websockets>=12.0` (provides both `websockets` async server and `websockets.sync.client` for CDP), `qrcode>=7.4`, `Pillow>=10.0` (QR optional at runtime — app degrades gracefully)
 - Android: OkHttp 4.12 (WebSocket), ZXing Android Embedded 4.3 (QR scan), Material 1.11
-- Firefox must be installed and support `--marionette`; the app warns if not found
+- One of Edge or Firefox must be installed; the app warns if neither is found. Firefox needs `--marionette`; Edge needs `--remote-debugging-port` (built-in to all modern Chromium builds, no extra driver).

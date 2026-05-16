@@ -42,16 +42,19 @@ class ShareLinkService : Service() {
         const val ACTION_CONNECT = "com.sharelink.action.CONNECT"
         const val ACTION_SEND_URL = "com.sharelink.action.SEND_URL"
         const val ACTION_SEND_COMMAND = "com.sharelink.action.SEND_COMMAND"
+        const val ACTION_SEND_BROWSER = "com.sharelink.action.SEND_BROWSER"
         const val ACTION_DISCONNECT = "com.sharelink.action.DISCONNECT"
 
         const val EXTRA_IP = "ip"
         const val EXTRA_URL = "url"
         const val EXTRA_COMMAND = "command"
+        const val EXTRA_BROWSER = "browser"
 
         private const val CHANNEL_ID = "sharelink_connection"
         private const val NOTIF_ID = 42
         private const val PREFS = "sharelink"
         private const val PREF_IP = "pc_ip"
+        private const val PREF_BROWSER = "browser"
 
         private val listeners = CopyOnWriteArrayList<StateListener>()
 
@@ -110,6 +113,12 @@ class ShareLinkService : Service() {
             backoffSec = 3L
             publishState(ConnState.CONNECTED, targetIp)
             updateNotification()
+            // Sync browser preference tới desktop ngay khi connect
+            val browser = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getString(PREF_BROWSER, "edge") ?: "edge"
+            ws.send(JSONObject()
+                .put("command", "set_browser")
+                .put("browser", browser).toString())
             // flush queued URLs
             while (true) {
                 val u = pendingUrls.pollFirst() ?: break
@@ -174,6 +183,11 @@ class ShareLinkService : Service() {
                     }
                     val ws = webSocket
                     if (isConnected.get() && ws != null) {
+                        val browser = getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getString(PREF_BROWSER, "edge") ?: "edge"
+                        ws.send(JSONObject()
+                            .put("command", "set_browser")
+                            .put("browser", browser).toString())
                         ws.send(JSONObject().put("url", u).toString())
                     } else {
                         pendingUrls.addLast(u)
@@ -185,6 +199,16 @@ class ShareLinkService : Service() {
                 val cmd = intent.getStringExtra(EXTRA_COMMAND)?.trim().orEmpty()
                 if (cmd.isNotEmpty()) {
                     webSocket?.send(JSONObject().put("command", cmd).toString())
+                }
+            }
+            ACTION_SEND_BROWSER -> {
+                val browser = intent.getStringExtra(EXTRA_BROWSER)?.trim().orEmpty()
+                if (browser == "edge" || browser == "firefox") {
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putString(PREF_BROWSER, browser).apply()
+                    webSocket?.send(JSONObject()
+                        .put("command", "set_browser")
+                        .put("browser", browser).toString())
                 }
             }
             ACTION_DISCONNECT -> {
