@@ -10,6 +10,8 @@ import threading
 import logging
 import time
 import os
+import shutil
+import sqlite3
 import urllib.request
 import tkinter as tk
 import tkinter.messagebox
@@ -23,7 +25,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 UPDATE_URL = "https://api.github.com/repos/barrynguyen/sharelink/releases/latest"
 PORT = 8765
 MARIONETTE_PORT = 2828
@@ -32,6 +34,107 @@ CDP_PORT = 9222
 APP_SUPPORT_DIR = os.path.expanduser('~/Library/Application Support/ShareLink')
 CONFIG_PATH = os.path.join(APP_SUPPORT_DIR, 'config.json')
 EDGE_PROFILE_DIR = os.path.join(APP_SUPPORT_DIR, 'edge-profile')
+MAIN_EDGE_PROFILE = os.path.expanduser('~/Library/Application Support/Microsoft Edge')
+EDGE_SEED_MARKER = os.path.join(EDGE_PROFILE_DIR, '.sharelink_seeded')
+
+
+def disable_edge_translate():
+    """Patch Preferences trong ShareLink edge-profile để tắt translate.
+    Chỉ ăn nếu Edge KHÔNG đang chạy profile này (Edge chỉ đọc Preferences lúc start)."""
+    pref_path = os.path.join(EDGE_PROFILE_DIR, 'Default', 'Preferences')
+    os.makedirs(os.path.dirname(pref_path), exist_ok=True)
+    try:
+        with open(pref_path) as f:
+            p = json.load(f)
+    except Exception:
+        p = {}
+    p.setdefault('translate', {})['enabled'] = False
+    # Chặn mọi ngôn ngữ thường gặp → popup không bao giờ xuất hiện
+    p['translate_blocked_languages'] = [
+        'vi', 'en', 'zh', 'zh-CN', 'zh-TW', 'ja', 'ko', 'es', 'fr', 'de',
+        'pt', 'ru', 'ar', 'th', 'id', 'it', 'nl', 'pl', 'tr', 'hi',
+    ]
+    try:
+        with open(pref_path, 'w') as f:
+            json.dump(p, f)
+    except Exception:
+        pass
+
+
+def seed_edge_profile():
+    """Lần đầu chạy: copy cookies + Local State + Login Data từ Edge profile chính
+    sang profile ShareLink để user không phải login lại. Chỉ chạy 1 lần (marker).
+    Cookies sqlite có thể bị WAL lock nếu Edge chính đang mở — đành chấp nhận risk."""
+    # Migration: profile cũ có thể đã copy `Preferences` từ Edge chính
+    # — phải xoá vì nó disable CDP. Chỉ xoá file Preferences chứa key
+    # "managed_user_id" hoặc đã từng seed (có marker cũ).
+    if os.path.exists(EDGE_SEED_MARKER):
+        bad_pref = os.path.join(EDGE_PROFILE_DIR, 'Default', 'Preferences')
+        if os.path.exists(bad_pref):
+            try:
+                os.remove(bad_pref)
+                print("[edge] removed bad Preferences from seeded profile", flush=True)
+            except Exception:
+                pass
+        return
+    if not os.path.isdir(MAIN_EDGE_PROFILE):
+        return  # user chưa từng dùng Edge chính
+    os.makedirs(os.path.join(EDGE_PROFILE_DIR, 'Default'), exist_ok=True)
+    # Local State chứa encryption key reference (cùng Keychain item "Microsoft Edge Safe Storage")
+    for fname in ['Local State']:
+        src = os.path.join(MAIN_EDGE_PROFILE, fname)
+        if os.path.exists(src):
+            try:
+                shutil.copy2(src, os.path.join(EDGE_PROFILE_DIR, fname))
+            except Exception:
+                pass
+    # Profile-level data. KHÔNG copy:
+    # - `Preferences` (chứa policy disable remote-debugging từ Edge chính)
+    # - `Login Data For Account` (MSA-synced credentials → trigger enterprise mode)
+    src_def = os.path.join(MAIN_EDGE_PROFILE, 'Default')
+    dst_def = os.path.join(EDGE_PROFILE_DIR, 'Default')
+    for fname in [
+        'Cookies', 'Cookies-journal',
+        'Login Data', 'Login Data-journal',
+        'Web Data', 'Web Data-journal',
+    ]:
+        src = os.path.join(src_def, fname)
+        if os.path.exists(src):
+            try:
+                shutil.copy2(src, os.path.join(dst_def, fname))
+            except Exception:
+                pass
+    # Lọc bỏ MSA cookies — chúng trigger enterprise policy ẩn CDP targets,
+    # khiến pause / fullscreen / navigate qua CDP fail dù port 9222 đang listen.
+    cookies_db = os.path.join(dst_def, 'Cookies')
+    if os.path.exists(cookies_db):
+        try:
+            con = sqlite3.connect(cookies_db)
+            cur = con.cursor()
+            cur.execute("""DELETE FROM cookies WHERE
+                host_key LIKE '%microsoft%' OR
+                host_key LIKE '%live.com%' OR
+                host_key LIKE '%msn.com%' OR
+                host_key LIKE '%office%' OR
+                host_key LIKE '%bing.com%' OR
+                host_key LIKE '%outlook%' OR
+                host_key LIKE '%onedrive%' OR
+                host_key LIKE '%sharepoint%' OR
+                host_key LIKE '%azureedge%' OR
+                host_key LIKE '%msauth%' OR
+                host_key LIKE '%msauthimages%'""")
+            print(f"[edge] stripped {cur.rowcount} MSA cookies from seeded profile",
+                  flush=True)
+            con.commit()
+            con.close()
+        except Exception as e:
+            print(f"[edge] cookie strip failed: {e}", flush=True)
+    try:
+        with open(EDGE_SEED_MARKER, 'w') as f:
+            f.write('1')
+    except Exception:
+        pass
+    print("[edge] seeded ShareLink Edge profile from main Edge profile", flush=True)
 
 
 def load_config():
@@ -338,8 +441,34 @@ def marionette_click_fullscreen():
 
 # ── CDP (Chrome DevTools Protocol) helper cho Edge ────────────────────────────
 
+def _cdp_browser_ws():
+    """Lấy browser-level WebSocket URL từ /json/version."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{CDP_PORT}/json/version")
+        with urllib.request.urlopen(req, timeout=2) as r:
+            return json.loads(r.read().decode()).get('webSocketDebuggerUrl')
+    except Exception:
+        return None
+
+
+def _cdp_query_targets():
+    """Query Target.getTargets qua browser ws — work với Edge 148+ vốn không list /json."""
+    bws = _cdp_browser_ws()
+    if not bws:
+        return []
+    try:
+        with ws_connect(bws, open_timeout=3) as ws:
+            r = _cdp_send(ws, 1, "Target.getTargets", {})
+            if not r:
+                return []
+            return r.get('result', {}).get('targetInfos', []) or []
+    except Exception:
+        return []
+
+
 def cdp_page_target():
-    """Trả về webSocketDebuggerUrl của tab page đầu tiên, hoặc None."""
+    """Trả về webSocketDebuggerUrl của tab page đầu tiên, hoặc None.
+    Ưu tiên /json (legacy); fallback Target.getTargets cho Edge 148+ vốn ẩn /json."""
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{CDP_PORT}/json")
         with urllib.request.urlopen(req, timeout=2) as r:
@@ -349,6 +478,12 @@ def cdp_page_target():
                 return t['webSocketDebuggerUrl']
     except Exception:
         pass
+    # Fallback cho Edge 148+
+    for t in _cdp_query_targets():
+        if t.get('type') == 'page':
+            tid = t.get('targetId')
+            if tid:
+                return f"ws://127.0.0.1:{CDP_PORT}/devtools/page/{tid}"
     return None
 
 
@@ -388,7 +523,7 @@ def cdp_navigate(url):
         return False
 
 
-def _cdp_eval(js, return_by_value=True):
+def _cdp_eval(js, return_by_value=True, user_gesture=True):
     target = cdp_page_target()
     if not target:
         return None
@@ -398,6 +533,8 @@ def _cdp_eval(js, return_by_value=True):
                 "expression": js,
                 "returnByValue": return_by_value,
                 "awaitPromise": False,
+                # userGesture cần thiết cho requestFullscreen() và một số API khác
+                "userGesture": user_gesture,
             })
             if not r:
                 return None
@@ -438,6 +575,26 @@ def cdp_toggle_pause():
     js = ("var v=document.querySelector('video');"
           "if(v){if(v.paused){v.play();}else{v.pause();}return true;}return false;")
     return bool(_cdp_eval(js))
+
+
+def cdp_close_page():
+    """Đóng page hiện tại qua browser-level CDP (thay cho Cmd+W AppleScript)."""
+    bws = _cdp_browser_ws()
+    if not bws:
+        return False
+    target_id = None
+    for t in _cdp_query_targets():
+        if t.get('type') == 'page':
+            target_id = t.get('targetId')
+            break
+    if not target_id:
+        return False
+    try:
+        with ws_connect(bws, open_timeout=3) as ws:
+            r = _cdp_send(ws, 1, "Target.closeTarget", {"targetId": target_id})
+            return bool(r and 'result' in r)
+    except Exception:
+        return False
 
 
 class App:
@@ -633,12 +790,15 @@ class App:
         if self.browser == 'edge':
             if binary:
                 os.makedirs(EDGE_PROFILE_DIR, exist_ok=True)
+                seed_edge_profile()
+                disable_edge_translate()
                 subprocess.Popen(
                     [binary,
                      f'--remote-debugging-port={CDP_PORT}',
                      f'--user-data-dir={EDGE_PROFILE_DIR}',
                      '--no-first-run',
                      '--no-default-browser-check',
+                     '--disable-features=Translate',
                      url],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
@@ -762,6 +922,12 @@ class App:
 
     def _stop_video(self):
         self._skip_ad_active = False
+        # Edge: dùng CDP đóng tab (không cần Accessibility permission)
+        if self.browser == 'edge' and cdp_close_page():
+            self._is_playing = False
+            self._paused = False
+            self._update_controls()
+            return
         app = self._browser_app_name()
         osascript(f'''
             tell application "{app}" to activate

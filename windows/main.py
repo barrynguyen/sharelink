@@ -23,7 +23,7 @@ try:
 except ImportError:
     HAS_QR = False
 
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 UPDATE_URL = "https://api.github.com/repos/barrynguyen/sharelink/releases/latest"
 PORT = 8765
 MARIONETTE_PORT = 2828
@@ -369,8 +369,31 @@ def marionette_click_fullscreen():
 
 # ── CDP (Chrome DevTools Protocol) helper cho Edge ────────────────────────────
 
+def _cdp_browser_ws():
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{CDP_PORT}/json/version")
+        with urllib.request.urlopen(req, timeout=2) as r:
+            return json.loads(r.read().decode()).get('webSocketDebuggerUrl')
+    except Exception:
+        return None
+
+
+def _cdp_query_targets():
+    bws = _cdp_browser_ws()
+    if not bws:
+        return []
+    try:
+        with ws_connect(bws, open_timeout=3) as ws:
+            r = _cdp_send(ws, 1, "Target.getTargets", {})
+            if not r:
+                return []
+            return r.get('result', {}).get('targetInfos', []) or []
+    except Exception:
+        return []
+
+
 def cdp_page_target():
-    """Trả về webSocketDebuggerUrl của tab page đầu tiên, hoặc None."""
+    """Ưu tiên /json (legacy); fallback Target.getTargets cho Edge 148+ vốn ẩn /json."""
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{CDP_PORT}/json")
         with urllib.request.urlopen(req, timeout=2) as r:
@@ -380,6 +403,11 @@ def cdp_page_target():
                 return t['webSocketDebuggerUrl']
     except Exception:
         pass
+    for t in _cdp_query_targets():
+        if t.get('type') == 'page':
+            tid = t.get('targetId')
+            if tid:
+                return f"ws://127.0.0.1:{CDP_PORT}/devtools/page/{tid}"
     return None
 
 
@@ -419,7 +447,7 @@ def cdp_navigate(url):
         return False
 
 
-def _cdp_eval(js, return_by_value=True):
+def _cdp_eval(js, return_by_value=True, user_gesture=True):
     target = cdp_page_target()
     if not target:
         return None
@@ -429,6 +457,7 @@ def _cdp_eval(js, return_by_value=True):
                 "expression": js,
                 "returnByValue": return_by_value,
                 "awaitPromise": False,
+                "userGesture": user_gesture,
             })
             if not r:
                 return None
@@ -468,6 +497,25 @@ def cdp_toggle_pause():
     js = ("var v=document.querySelector('video');"
           "if(v){if(v.paused){v.play();}else{v.pause();}return true;}return false;")
     return bool(_cdp_eval(js))
+
+
+def cdp_close_page():
+    bws = _cdp_browser_ws()
+    if not bws:
+        return False
+    target_id = None
+    for t in _cdp_query_targets():
+        if t.get('type') == 'page':
+            target_id = t.get('targetId')
+            break
+    if not target_id:
+        return False
+    try:
+        with ws_connect(bws, open_timeout=3) as ws:
+            r = _cdp_send(ws, 1, "Target.closeTarget", {"targetId": target_id})
+            return bool(r and 'result' in r)
+    except Exception:
+        return False
 
 
 class App:
@@ -734,6 +782,7 @@ class App:
                     f'--user-data-dir={EDGE_PROFILE_DIR}',
                     '--no-first-run',
                     '--no-default-browser-check',
+                    '--disable-features=Translate',
                     url,
                 ])
             else:
@@ -828,6 +877,13 @@ class App:
 
     def _stop_video(self):
         self._skip_ad_active = False
+        # Edge: dùng CDP đóng tab — work cả khi window không focus được
+        if self.browser == 'edge' and cdp_close_page():
+            self._is_playing = False
+            self._browser_hwnd = None
+            self._paused = False
+            self._update_controls()
+            return
         if self._focus_browser():
             keypress(VK_F11)      # thoát fullscreen
             time.sleep(0.3)

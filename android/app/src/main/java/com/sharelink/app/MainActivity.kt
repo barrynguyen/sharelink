@@ -65,6 +65,9 @@ class MainActivity : AppCompatActivity() {
             ShareLinkService.ConnState.CONNECTED -> {
                 setStatus(Status.CONNECTED)
                 btnConnect.text = "RECONNECT"
+                // Khi đã connect, cho phép user dùng fullscreen/pause/stop —
+                // không phụ thuộc local isVideoPlaying (silent share không set flag này).
+                setControlsEnabled(true)
             }
             ShareLinkService.ConnState.CONNECTING -> {
                 setStatus(Status.CONNECTING)

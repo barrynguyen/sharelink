@@ -1,7 +1,7 @@
 {
-  "version": "1.7.0",
-  "changelog": "Thêm chọn trình duyệt Edge/Firefox: card BROWSER mới trên Android, Mac, Windows. Edge dùng Chrome DevTools Protocol (auto-fullscreen, skip ad, pause/stop ngang Firefox). Android toggle tự sync sang desktop qua WebSocket. Skip-ad mạnh hơn: seek thẳng video quảng cáo đến cuối, work cả với ad không bỏ qua được.",
-  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.7.0/ShareLink.apk",
-  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.7.0/sharelink-windows.zip",
-  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.7.0/sharelink-mac.zip"
+  "version": "1.7.1",
+  "changelog": "Sửa Edge mode trên Mac: lọc cookies Microsoft khi seed profile (vì MSA login trigger enterprise policy ẩn CDP targets); tắt auto-translate; bỏ Preferences từ profile gốc; nút fullscreen/pause/kill trên Android giờ enable ngay khi WebSocket connected (work cả với silent share). Stop dùng CDP Page.close, không cần Accessibility permission.",
+  "android_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.7.1/ShareLink.apk",
+  "windows_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.7.1/sharelink-windows.zip",
+  "mac_url": "https://github.com/barrynguyen/sharelink/releases/download/v1.7.1/sharelink-mac.zip"
 }
